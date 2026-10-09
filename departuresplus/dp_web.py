@@ -82,7 +82,7 @@ def init(app):
 
     @ampule.route("/api/config", method="GET")
     def _cfg_get(request):
-        return _json(_app.cfg)
+        return _json(dp_cfg.DEFAULTS if "defaults" in request.params else _app.cfg)
 
     @ampule.route("/api/config", method="POST")
     def _cfg_post(request):
@@ -125,6 +125,7 @@ def init(app):
     @ampule.route("/api/message", method="GET")
     def _message(request):
         # text=...&ttl=60 shows a message for 60 seconds, ttl=0 keeps it until cleared or restarted.
+        # Timed messages queue up: each gets the ticker to itself for its time, one after the other.
         # wake=1 lights the ticker of a switched-off display for as long as the message runs.
         p = request.params
         if "clear" in p:

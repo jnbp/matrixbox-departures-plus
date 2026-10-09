@@ -1,8 +1,8 @@
-# Departures Plus - configuration, strings and colour tables.
+# Departures Plus - configuration, strings and line colours.
 # Pure data and helpers, no hardware access.
 import json
 
-VERSION = "0.6.3"
+VERSION = "0.7.0"
 APP = "departuresplus"
 CFG_FILE = "departuresplus.json"
 
@@ -93,34 +93,48 @@ ABBR = (("Zoologischer Garten", "Zoo"), ("Straße", "Str."), ("straße", "str.")
         ("platz", "pl."), ("Rathaus", "Rath."), ("Bahnhof", "Bhf"), ("bahnhof", "bhf"), ("Hauptbhf", "Hbf"),
         ("centrum", "C"), ("strand", "str."), ("Station", "Stn"))
 
-# Line colours as shown on a monitor (0xRRGGBB). The screen converts them for the LED panel.
-VBB = {
-    "U1": 0x7DAD4C, "U12": 0x7DAD4C, "U2": 0xDA421E, "U3": 0x16683D, "U4": 0xF0D722, "U5": 0x7E5330,
-    "U6": 0x8C6DAB, "U7": 0x528DBA, "U8": 0x224F86, "U9": 0xF3791D,
-    "S1": 0xDA6BA2, "S2": 0x007734, "S25": 0x007734, "S26": 0x007734, "S3": 0x0066AD, "S41": 0xAD5937,
-    "S42": 0xCB6418, "S45": 0xCD9C53, "S46": 0xCD9C53, "S47": 0xCD9C53, "S5": 0xEB7405, "S7": 0x816DA6,
-    "S75": 0x816DA6, "S8": 0x66AA22, "S85": 0x66AA22, "S9": 0x992746,
-}
-VBB_MODE = {"BUS": 0x5A0084, "TRAM": 0xBE1414, "SHIP": 0x528DBA, "TRAIN": 0xDA251D}
-SL = {"10": 0x0089CA, "11": 0x0089CA, "13": 0xD71D24, "14": 0xD71D24, "17": 0x179D4D, "18": 0x179D4D, "19": 0x179D4D}
-
 TONE_BOX = -1   # "no known colour": draw the signet in the board's own LED tone
+_tabs = {}      # "de/vbb" -> {key: 0xRRGGBB}, read from colors.txt when an operator first shows up
 
 
-def line_color(operator, line, mode, api_color):
-    """Returns (rgb or TONE_BOX, rounded corners)."""
-    line = str(line).upper()
-    if operator in ("vbb", "be"):
-        if line in VBB: return VBB[line], line[:1] == "S"
-        if mode in VBB_MODE and mode != "METRO": return VBB_MODE[mode], mode in ("BUS", "TRAM")
-    elif operator == "sl":
-        if mode == "METRO" and line in SL: return SL[line], False
-    if api_color:
+def _table(op):
+    t = _tabs.get(op)
+    if t is None:
+        t = {}
         try:
-            c = str(api_color).replace("#", "")
-            if len(c) == 6: return int(c, 16), False
+            with open("colors.txt") as f:
+                for row in f:
+                    cut = row.find("|")
+                    if cut < 0 or op not in row[:cut].split(","): continue
+                    for part in row[cut + 1:].split():
+                        kv = part.split("=")
+                        pre = ""
+                        for k in kv[0].split(","):
+                            if "/" in k: pre = k[:k.find("/") + 1]      # "METRO/10,11" means METRO/10 and METRO/11
+                            else: k = pre + k
+                            t[k] = int(kv[1], 16)
+                    break
+        except Exception as e:
+            print("departuresplus: colors.txt,", e)
+        _tabs[op] = t
+    return t
+
+
+def line_color(country, operator, line, mode, api_color):
+    """Returns (rgb as shown on a monitor or TONE_BOX, rounded corners). The screen converts it for the LED panel."""
+    line = str(line).upper().replace(" ", "")
+    pill = mode in ("BUS", "TRAM") or (line[:1] == "S" and line[1:2].isdigit())
+    t = _table(country + "/" + operator)
+    c = t.get(mode + "/" + line)
+    if c is None: c = t.get(line)
+    if c is None and api_color:
+        try:
+            a = str(api_color).replace("#", "").split("~")[0]      # "f00~fff~": signet and text colour
+            if len(a) == 3: a = a[0] * 2 + a[1] * 2 + a[2] * 2
+            if len(a) == 6: c = int(a, 16)
         except Exception: pass
-    return TONE_BOX, mode in ("BUS", "TRAM")
+    if c is None: c = t.get("@" + mode)
+    return (TONE_BOX if c is None else c), pill
 
 
 def pairs(text):

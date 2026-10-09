@@ -19,7 +19,7 @@ class App:
         self.net = dp_data.Net()
         self.scr = dp_draw.Screen(self.cfg)
         self.cache = {}        # station key -> {"deps", "t", "msg", "retry"}
-        self.msgs = []         # [id, text, expires_ms or 0 for "until cleared", wakes the display]
+        self.msgs = []         # [id, text, ms to show or 0 for "until cleared", wakes the display, started at]
         self.dev = []          # operator service messages
         self.dev_t = None
         self.power = True      # what the user or Home Assistant asked for
@@ -196,7 +196,7 @@ class App:
         items.sort(key=lambda x: x[0])
         rows = []
         for when, d, st, mins, late in items[:limit]:
-            rgb, pill = dp_cfg.line_color(self.cache[self.key(st)]["op"], d[1], d[2], d[6])
+            rgb, pill = dp_cfg.line_color(st["country"], self.cache[self.key(st)]["op"], d[1], d[2], d[6])
             if c["badge"] == "mono" or (d[2] in ("BUS", "TRAM") and not c["bus_color"]): rgb = None
             elif rgb == dp_cfg.TONE_BOX and c["badge"] != "fill": rgb = None
             rows.append({"line": d[1], "dest": d[3], "time": self.time_str(mins, d[5], when), "mins": mins,
@@ -233,11 +233,11 @@ class App:
             for d in e["deps"]:
                 if d[1] and d[1] not in seen:
                     seen.append(d[1])
-                    rgb, pill = dp_cfg.line_color(e["op"], d[1], d[2], d[6])
+                    rgb, pill = dp_cfg.line_color(st["country"], e["op"], d[1], d[2], d[6])
                     if self.cfg["badge"] == "mono" or (d[2] in ("BUS", "TRAM") and not self.cfg["bus_color"]): rgb = None
                     lines.append((d[1], rgb, pill))
         w = st["walk"]
-        self.scr.draw_intro(bmp, dp_data.clean_dest(st["name"], self.cfg["strip_prefix"]), lines[:8],
+        self.scr.draw_intro(bmp, st["name"], lines[:8],        # the name exactly as it stands in the settings
                             self.S("walk").replace("%", str(w)) if w else "", (str(w) + " " + self.S("min").upper()) if w else "", self.cfg)
 
     # ---- flow ----------------------------------------------------------
@@ -346,13 +346,16 @@ class App:
             self.scr.set_left(cs, date, c["st_icon"] and c["st_clock"])
             if w != self.scr.left_w: self.tick_s = None      # the ticker's left edge moved
             changed = True
-        self.prune()
+        head = self.prune()
         parts = []
-        if c["st_ticker"]:
-            if c["ticker_text"]: parts.append(c["ticker_text"])
-            parts += [m[1] for m in self.msgs]
-            if c["ticker_dev"]: parts += self.dev
-        if self.vis == 2: parts = [m[1] for m in self.msgs if m[3]]
+        if self.vis == 2:
+            parts = [head[1]] if (head and head[3]) else [m[1] for m in self.msgs if m[3] and not m[2]]
+        elif c["st_ticker"]:
+            if head: parts = [head[1]]       # a timed message has the ticker to itself for its time
+            else:
+                if c["ticker_text"]: parts.append(c["ticker_text"])
+                parts += [m[1] for m in self.msgs if not m[2]]
+                if c["ticker_dev"]: parts += self.dev
         ts = (SEP.join(parts) + SEP) if parts else ""
         if ts != self.tick_s or force:
             self.tick_s = ts
@@ -386,14 +389,26 @@ class App:
         return (a <= t < b) if a < b else (t >= a or t < b)
 
     def prune(self):
+        """Timed messages form a queue: one at a time, each for its own time. Returns the one whose turn it is."""
         t = mono_ms()
-        self.msgs = [m for m in self.msgs if not m[2] or m[2] > t]
+        head = None
+        for m in self.msgs:
+            if not m[2]: continue
+            if not m[4]: m[4] = t                    # its turn starts now
+            if t - m[4] < m[2]:
+                head = m
+                break
+            m[1] = ""                                # done
+        self.msgs = [m for m in self.msgs if m[1]]
+        return head
 
     def woken(self):
         """A ticker message that asked for it lights the ticker of a switched-off display while it runs."""
         if not self.scr.band or not self.cfg["st_ticker"]: return False
+        head = self.prune()
+        if head and head[3]: return True
         for m in self.msgs:
-            if m[3]: return True
+            if m[3] and not m[2]: return True
         return False
 
     def apply_shown(self):
@@ -407,6 +422,9 @@ class App:
             self.sig = None
             self.t_sec = 0
             self.t0 = mono_ms()
+            if self.cfg["mode"] == "rotate" and self.active():
+                self.phase = "none"              # back on: start over with the first station and its title
+                self.show(0 if self.pin < 0 else self.pin, False)
         elif want == 2:
             self.status_update()
             display.refresh()
@@ -414,9 +432,14 @@ class App:
     def message(self, text, ttl=60, mid="", wake=False):
         text = str(text).replace("\n", " ").strip()[:120]
         mid = str(mid) or text
-        self.msgs = [m for m in self.msgs if m[0] != mid]
-        if text: self.msgs.append([mid, text, (mono_ms() + int(ttl) * 1000) if int(ttl) > 0 else 0, bool(wake)])
-        self.msgs = self.msgs[-6:]
+        new = [mid, text, max(0, int(ttl)) * 1000, bool(wake), 0]
+        for i in range(len(self.msgs)):
+            if self.msgs[i][0] == mid:           # the same id again replaces the message where it stands
+                self.msgs[i] = new
+                new = None
+                break
+        if new: self.msgs.append(new)
+        self.msgs = [m for m in self.msgs if m[1]][-10:]
 
     def poll_one(self, act):
         for st in act:
