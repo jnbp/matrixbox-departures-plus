@@ -2,7 +2,7 @@
 # Pure data and helpers, no hardware access.
 import json
 
-VERSION = "0.7.1"
+VERSION = "0.8.0"
 APP = "departuresplus"
 CFG_FILE = "departuresplus.json"
 
@@ -10,15 +10,18 @@ DEFAULTS = {
     "stations": [],          # [{name, country, operator, id, walk, on, lines, dir, modes, fb_operator, fb_id}]
     "mode": "rotate",        # rotate | merged
     "tag": 1,                # merged list: first letters of the station next to each departure
-    "intro": 2,              # seconds, 0 = off
+    "intro": 2,              # seconds in steps of 0.5, 0 = off
     "intro_single": 0,       # with one station only: show its title again after every round
-    "dwell": 7,              # seconds of departures per station
-    "trans": "scroll",       # scroll | cut
+    "dwell": 7,              # seconds of departures per page
+    "pages": 1,              # up to N pages of departures per station, one after the other
+    "page_trans": "auto",    # how a page turns: auto (sideways, or up when stations move sideways) or any page change
+    "trans": "scroll",       # scroll (up) | down | left | right | dissolve | blinds | wipe | random | cut
+    "list_anim": "off",      # off | roll | scroll | down | left | right: departures that move up slide there
     "skip": 0,               # skip a station with nothing leaving within N min, 0 = never
     "pager": "dots",         # dots | bar | off
     "font": "normal",        # compact | normal | large
     "max_rows": 0,           # 0 = as many as fit
-    "badge": "fill",         # fill | text | mono
+    "badge": "fill",         # fill | invert (white box, coloured name) | text | mono
     "badge_ink": "auto",     # auto | black | white: the text inside a signet
     "bus_color": 1,
     "time_fmt": "min",       # min | tick | plain | clock
@@ -47,6 +50,8 @@ DEFAULTS = {
     "st_ticker": 1,
     "ticker_color": "white", # white | tone
     "ticker_text": "",       # always in the ticker
+    "ticker_gapless": 1,     # an endless belt; 0 = a round leaves the screen before the next one starts
+    "ticker_sep": "+++",     # stands between two texts
     "ticker_dev": 1,         # show the operator's service messages in the ticker
     "ticker_speed": "normal",  # fast | normal | slow
     "tone": "amber",         # see dp_draw.TONES, or "custom" with tone_hex
@@ -54,6 +59,7 @@ DEFAULTS = {
     "margin_l": 0,           # unused columns at the left and right edge
     "margin_r": 0,
     "brightness": 2,         # 1..3
+    "invert": 0,             # the whole panel lit, the text dark
     "button": "next",        # next | power
     "sleep": 0,              # display off while nothing departs
     "sched": 0,              # daily on/off times
@@ -68,17 +74,19 @@ DEFAULTS = {
 }
 
 CHOICES = {
-    "mode": ("rotate", "merged"), "trans": ("scroll", "cut"), "pager": ("dots", "bar", "off"),
-    "font": ("compact", "normal", "large"), "badge": ("fill", "text", "mono"),
+    "mode": ("rotate", "merged"), "trans": ("scroll", "down", "left", "right", "dissolve", "blinds", "wipe", "random", "cut"),
+    "page_trans": ("auto", "scroll", "down", "left", "right", "dissolve", "blinds", "wipe", "random", "cut"),
+    "list_anim": ("off", "roll", "scroll", "down", "left", "right", "dissolve", "blinds", "wipe"), "pager": ("dots", "bar", "off"),
+    "font": ("compact", "normal", "large"), "badge": ("fill", "invert", "text", "mono"),
     "time_fmt": ("min", "tick", "plain", "clock"), "delay": ("incl", "plus"), "walk": ("show", "dim", "hide"),
     "status": ("on", "off"), "st_date": ("off", "date", "wday"), "ticker_color": ("white", "tone"),
     "tone": ("amber", "orange", "yellow", "white", "warm", "red", "green", "blue", "cyan", "pink", "custom"),
     "button": ("next", "power"), "ticker_speed": ("fast", "normal", "slow"),
     "blink": ("off", "time", "dest", "line", "row"), "live": ("off", "wave", "dot", "bar", "tick", "approx"), "delay_color": ("red", "tone"), "badge_ink": ("auto", "black", "white"),
 }
-LIMITS = {"intro": (0, 10), "dwell": (3, 60), "skip": (0, 60), "brightness": (1, 3), "poll": (20, 600),
+LIMITS = {"intro": (0, 10), "dwell": (3, 60), "pages": (1, 3), "skip": (0, 60), "brightness": (1, 3), "poll": (20, 600),
           "port": (1, 65535), "max_rows": (0, 16), "line_len": (0, 6), "line_col": (0, 6), "gap": (0, 12), "tx_power": (0, 20), "margin_l": (0, 12), "margin_r": (0, 12)}
-STRLEN = {"ticker_text": 160, "abbr": 240, "strip": 120, "sched_days": 100, "tone_hex": 7, "walk_text": 24, "days_text": 70}
+STRLEN = {"ticker_text": 160, "abbr": 240, "strip": 120, "sched_days": 100, "tone_hex": 7, "walk_text": 24, "days_text": 70, "ticker_sep": 12, "nodeps_text": 60}
 
 # Fixed words. Each can be replaced with the setting named <key>_text.
 STR = {"now": "now", "now_s": "0", "cancel": "cancelled", "cancel_s": "canc.", "min": "min", "walk": "% MIN WALK",
@@ -157,13 +165,15 @@ def hhmm(text, fallback):
 
 def _clean_station(s):
     out = {"name": str(s.get("name", ""))[:40], "country": str(s.get("country", "")), "operator": str(s.get("operator", "")),
-           "id": str(s.get("id", "")), "on": 1 if s.get("on", 1) else 0, "lines": str(s.get("lines", ""))[:60],
+           "id": str(s.get("id", "")), "on": 1 if s.get("on", 1) else 0, "lines": str(s.get("lines", ""))[:80],
            "modes": str(s.get("modes", "")).upper()[:40],
            "fb_operator": str(s.get("fb_operator", ""))[:20], "fb_id": str(s.get("fb_id", ""))[:60]}
     try: out["walk"] = max(0, min(60, int(s.get("walk", 0))))
     except Exception: out["walk"] = 0
     try: out["dir"] = max(0, min(2, int(s.get("dir", 0))))
     except Exception: out["dir"] = 0
+    try: out["pages"] = max(0, min(3, int(s.get("pages", 0))))      # 0 = the general setting
+    except Exception: out["pages"] = 0
     return out
 
 
@@ -176,7 +186,7 @@ def merge(cfg, new):
         try:
             if k == "stations":
                 if not isinstance(v, list): continue
-                v = [_clean_station(s) for s in v if isinstance(s, dict) and s.get("id")][:12]
+                v = [_clean_station(s) for s in v if isinstance(s, dict) and s.get("id")][:10]
             elif k in CHOICES:
                 v = str(v)
                 if k == "status" and v in ("clock", "ticker"):      # settings saved by 0.2
@@ -184,6 +194,10 @@ def merge(cfg, new):
                     v = "on"
                 if k == "blink" and v in ("0", "1"): v = "time" if v == "1" else "off"
                 if v not in CHOICES[k]: continue
+            elif k == "intro":
+                v = round(float(v) * 2) / 2
+                if v == int(v): v = int(v)
+                v = max(0, min(10, v))
             elif isinstance(d, int):
                 v = int(float(v))
                 if k in LIMITS: v = max(LIMITS[k][0], min(LIMITS[k][1], v))

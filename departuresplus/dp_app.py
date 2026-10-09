@@ -6,9 +6,6 @@ import dp_cfg, dp_data, dp_draw
 from dp_data import mono_ms
 from dp_draw import C_TONE, C_DIM
 
-SEP = "   +++   "
-
-
 def _pad2(n):
     return ("0" + str(n)) if n < 10 else str(n)
 
@@ -29,11 +26,15 @@ class App:
         self.notes = []
         self.pin = -1
         self.i = 0
+        self.pg = 0            # page within the station
+        self.npg = 1           # pages this station has right now
         self.phase = "none"
         self.t0 = mono_ms()
         self.sig = None
+        self.ids = None
         self.clock_s = None
         self.tick_s = None
+        self.tick_reset = False
         self.t_sec = 0
         self.t_tick = 0
         self.t_bar = 0
@@ -170,7 +171,7 @@ class App:
     def tag(self, st):
         return dp_data.clean_dest(st["name"], 1)[:3]
 
-    def rows_for(self, stations, limit, merged=False):
+    def rows_for(self, stations, limit, merged=False, skip=0):
         """-> (rows, message key or None)"""
         now = self.net.now()
         c = self.cfg
@@ -195,10 +196,10 @@ class App:
         if not items: return [], (msg or "nodeps")
         items.sort(key=lambda x: x[0])
         rows = []
-        for when, d, st, mins, late in items[:limit]:
+        for when, d, st, mins, late in items[skip:skip + limit]:
             rgb, pill = dp_cfg.line_color(st["country"], self.cache[self.key(st)]["op"], d[1], d[2], d[6])
             if c["badge"] == "mono" or (d[2] in ("BUS", "TRAM") and not c["bus_color"]): rgb = None
-            elif rgb == dp_cfg.TONE_BOX and c["badge"] != "fill": rgb = None
+            elif rgb == dp_cfg.TONE_BOX and c["badge"] not in ("fill", "invert"): rgb = None
             rows.append({"line": d[1], "dest": d[3], "time": self.time_str(mins, d[5], when), "mins": mins,
                          "dly": ("+" + str(d[4])) if (c["delay"] == "plus" and d[4] > 0 and not d[5]) else "",
                          "canc": d[5], "dim": bool(d[5]) or (late and c["walk"] == "dim"),
@@ -210,10 +211,39 @@ class App:
         if msg: return msg
         return "|".join([r["line"] + r["dest"] + r["time"] + r["dly"] + ("d" if r["dim"] else "") + ("b" if r["blink"] else "") + ("l" if r["live"] else "") for r in rows])
 
-    def page_rows(self):
+    def _page(self, pg, count=1):
         act = self.active()
-        if self.cfg["mode"] == "merged": return self.rows_for(act, self.rows_max(), True)
-        return self.rows_for([act[self.i]], self.rows_max())
+        n = self.rows_max()
+        if self.cfg["mode"] == "merged": return self.rows_for(act, n * count, True, pg * n)
+        return self.rows_for([act[self.i]], n * count, False, pg * n)
+
+    def page_rows(self):
+        rows, msg = self._page(self.pg)
+        if self.pg and not rows:        # the later page has run empty
+            self.pg = 0
+            rows, msg = self._page(0)
+        return rows, msg
+
+    def npages(self):
+        """Pages for what is on screen: the station's own number, or the general one."""
+        act = self.active()
+        if self.cfg["mode"] == "merged" or self.i >= len(act): return self.cfg["pages"]
+        return act[self.i].get("pages", 0) or self.cfg["pages"]
+
+    def more_pages(self):
+        if self.pg + 1 >= self.npages(): return False
+        rows, msg = self._page(self.pg + 1)
+        return bool(rows)
+
+    def turn(self, pg):
+        """Another page of the same station. Stations change one way, pages the other."""
+        self.pg = pg
+        self.draw_page(self.scr.nxt)
+        k = self.cfg["page_trans"]
+        if k == "auto": k = "scroll" if self.cfg["trans"] in ("left", "right") else "left"
+        self.scr.flip(k, self.on_frame)
+        self.pager()
+        self.t0 = mono_ms()
 
     def draw_page(self, bmp):
         rows, msg = self.page_rows()
@@ -224,6 +254,34 @@ class App:
         elif msg: self.scr.draw_message(bmp, [(msg[4:] if msg[:4] == "msg:" else self.S(msg), C_DIM)])
         else: self.scr.draw_rows(bmp, rows, self.cfg)
         self.sig = self._sig(rows, msg)
+        self.ids = None if msg else [r["line"] + "|" + r["dest"] for r in rows]
+        self.npg = 1
+        p = self.npages()
+        if p > 1 and not msg:
+            n = self.rows_max()
+            self.npg = max(1, (len(self._page(0, p)[0]) + n - 1) // n)
+
+    def update_page(self):
+        """What the page shows has changed. Departures that moved up can slide there."""
+        a = self.cfg["list_anim"]
+        old = self.ids
+        scr = self.scr
+        if a == "off" or not old:
+            self.draw_page(scr.cur)
+            return
+        self.draw_page(scr.nxt)
+        new = self.ids
+        k = 0
+        if new and new != old:
+            k = -1                      # changed, but not simply moved up
+            for s in range(1, len(old)):
+                if old[s:] == new[:len(old) - s]:
+                    k = s               # moved up by s rows
+                    break
+        if a == "roll":
+            if k > 0: scr.roll(k * scr.pitch, self.on_frame)
+            else: scr.flip("cut")
+        else: scr.flip(a if k else "cut", self.on_frame)
 
     def draw_intro(self, bmp, st):
         seen = []
@@ -251,6 +309,7 @@ class App:
         for k in list(self.cache):
             if k not in keep: del self.cache[k]      # stations that were removed
         self.i = 0 if self.pin < 0 else self.pin
+        self.pg = 0; self.npg = 1
         act = self.active()
         if self.i >= len(act): self.i = 0
         self.phase = "none"
@@ -276,8 +335,9 @@ class App:
         act = self.active()
         if not act: return
         self.i = idx % len(act)
+        self.pg = 0
         st = act[self.i]
-        scroll = animate and self.cfg["trans"] == "scroll"
+        scroll = self.cfg["trans"] if animate else "cut"
         if self.cfg["intro"] > 0 and (len(act) > 1 or self.phase == "none" or self.cfg["intro_single"]):
             self.phase = "intro"
             self.draw_intro(self.scr.nxt, st)
@@ -319,8 +379,8 @@ class App:
         self.show(ni)
 
     def pager(self, prog=0.0):
-        n = len(self.active()) if self.cfg["mode"] == "rotate" else 0
-        self.scr.set_pager(self.cfg["pager"], n, self.i, prog)
+        rot = self.cfg["mode"] == "rotate"
+        self.scr.set_pager(self.cfg["pager"], len(self.active()) if rot else 1, self.i if rot else 0, prog, self.npg, self.pg)
 
     def status_update(self, force=False):
         if not self.scr.band: return False
@@ -342,9 +402,7 @@ class App:
         left = cs + "|" + date
         if left != self.clock_s or force:
             self.clock_s = left
-            w = self.scr.left_w
             self.scr.set_left(cs, date, c["st_icon"] and c["st_clock"])
-            if w != self.scr.left_w: self.tick_s = None      # the ticker's left edge moved
             changed = True
         self.prune()
         parts = []
@@ -353,10 +411,10 @@ class App:
             if c["ticker_text"]: parts.append(c["ticker_text"])
             parts += [m[1] for m in self.msgs]       # all of them together, each until its own time is up
             if c["ticker_dev"]: parts += self.dev
-        ts = (SEP.join(parts) + SEP) if parts else ""
-        if ts != self.tick_s or force:
-            self.tick_s = ts
-            self.scr.set_ticker(ts)
+        if parts != self.tick_s or self.tick_reset or force:
+            self.scr.set_ticker(parts, self.tick_reset or force)     # the belt keeps running, only its contents change
+            self.tick_s = parts
+            self.tick_reset = False
             changed = True
         return changed
 
@@ -403,7 +461,7 @@ class App:
         self.vis = want
         self.shown = want == 1
         self.scr.power(want)
-        self.tick_s = None       # ticker-only shows just the waking messages
+        self.tick_reset = True   # ticker-only shows just the waking messages
         if want == 1:
             self.sig = None
             self.t_sec = 0
@@ -477,24 +535,37 @@ class App:
             if act and self.phase == "deps":
                 rows, msg = self.page_rows()
                 if self._sig(rows, msg) != self.sig:
-                    self.draw_page(scr.cur)
+                    self.update_page()
                     dirty = True
         if act:
             if self.cfg["mode"] == "merged":
-                self.poll_one(act)
+                if self.cfg["pages"] > 1 and now - self.t0 >= self.cfg["dwell"] * 1000:
+                    if self.more_pages(): self.turn(self.pg + 1)
+                    elif self.pg: self.turn(0)
+                    else: self.t0 = now
+                    dirty = True
+                else: self.poll_one(act)
             elif self.phase == "intro":
                 if now - self.t0 >= self.cfg["intro"] * 1000:
                     self.phase = "deps"
                     self.draw_page(scr.nxt)
-                    scr.flip(self.cfg["trans"] == "scroll", self.on_frame)
+                    scr.flip(self.cfg["trans"], self.on_frame)
                     self.t0 = mono_ms()
                     dirty = True
             elif self.phase == "deps":
-                if now - self.t0 >= self.cfg["dwell"] * 1000 and len(act) > 1 and self.pin < 0:
+                due = now - self.t0 >= self.cfg["dwell"] * 1000
+                if due and self.more_pages():
+                    self.turn(self.pg + 1)
+                    dirty = True
+                elif due and len(act) > 1 and self.pin < 0:
                     self.next_station()
                     dirty = True
-                elif now - self.t0 >= self.cfg["dwell"] * 1000 and self.cfg["intro_single"] and self.cfg["intro"] > 0 and (len(act) == 1 or self.pin >= 0):
+                elif due and self.cfg["intro_single"] and self.cfg["intro"] > 0 and (len(act) == 1 or self.pin >= 0):
                     self.show(self.i)
+                    dirty = True
+                elif due and self.npages() > 1:
+                    if self.pg: self.turn(0)
+                    else: self.t0 = now          # a single page for now: look again after the next round
                     dirty = True
                 elif self.stale(act[self.i]):
                     self.fetch(act[self.i])
@@ -522,7 +593,7 @@ class App:
         now = self.net.now()
         out = {"app": dp_cfg.APP, "version": dp_cfg.VERSION, "power": 1 if self.power else 0, "shown": 1 if self.shown else 0,
                "asleep": 1 if self.asleep else 0, "brightness": self.cfg["brightness"], "mode": self.cfg["mode"], "phase": self.phase,
-               "index": self.i, "pinned": self.pin, "station": act[self.i]["name"] if act and self.i < len(act) else "",
+               "index": self.i, "page": self.pg, "pinned": self.pin, "station": act[self.i]["name"] if act and self.i < len(act) else "",
                "time": (self.clock_s or "").split("|")[0], "ticker_text": self.cfg["ticker_text"], "messages": [m[1] for m in self.msgs], "width": self.scr.W, "height": self.scr.H, "stations": [],
                "woken": 1 if self.vis == 2 else 0,
                "uptime": int(time.monotonic() // 60)}

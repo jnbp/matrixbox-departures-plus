@@ -12,6 +12,7 @@ import dp_cfg
 
 C_TONE = 1; C_DIM = 2; C_FAINT = 3; C_RED = 4; C_REDDIM = 5; C_WHITE = 6; C_BLINK = 7; C_BOXW = 8; C_BOXWB = 9; C_TICK = 10
 C_L1 = 11; C_L2 = 12; C_L3 = 13       # the parts of an animated real-time mark
+C_BOXWD = 14                          # a dimmed white signet
 C_LINE0 = 15
 NCOL = 96          # 27 line colours, each as normal / dim / blinking
 
@@ -129,15 +130,17 @@ class Screen:
             if s > 1.5: t = (t[0] * 1.5 / s, t[1] * 1.5 / s, t[2] * 1.5 / s)   # keep white-ish tones from drawing too much power
         self.tone = t
         p = self.pal
-        p[0] = (0, 0, 0)
-        p[C_TONE] = self._lv(t[0], t[1], t[2])
+        inv = cfg.get("invert", 0)          # the whole panel lit, the text dark
+        p[0] = self._lv(t[0], t[1], t[2]) if inv else (0, 0, 0)
+        p[C_TONE] = (0, 0, 0) if inv else self._lv(t[0], t[1], t[2])
         p[C_DIM] = self._lv(t[0], t[1], t[2], self.dim_k)
         p[C_FAINT] = self._lv(t[0], t[1], t[2], 0.3 if self.L >= 6 else 0.67)
         p[C_RED] = self._lv(1, 0, 0)
         p[C_REDDIM] = self._lv(1, 0, 0, self.dim_k)
         p[C_WHITE] = self._lv(0.5, 0.5, 0.5)
         p[C_BOXW] = self._lv(0.75, 0.75, 0.75)
-        p[C_TICK] = p[C_TONE] if cfg.get("ticker_color") == "tone" else p[C_WHITE]
+        p[C_BOXWD] = self._lv(0.75, 0.75, 0.75, self.dim_k)
+        p[C_TICK] = p[C_TONE] if (inv or cfg.get("ticker_color") == "tone") else p[C_WHITE]
         for rgb in self.slots: self._fill_slot(rgb, self.slots[rgb])
         self.set_blink(self.blink_on)
         self.set_anim(self.anim[0], self.anim[1])
@@ -146,7 +149,7 @@ class Screen:
         r, g, b = _hex_rel(rgb)
         self.pal[i] = self._lv(r, g, b)
         self.pal[i + 1] = self._lv(r, g, b, self.dim_k)
-        self.pal[i + 2] = self.pal[i] if self.blink_on else (0, 0, 0)
+        self.pal[i + 2] = self.pal[i] if self.blink_on else self.pal[0]
 
     def line_slot(self, rgb):
         i = self.slots.get(rgb)
@@ -163,11 +166,11 @@ class Screen:
     def set_blink(self, on):
         self.blink_on = on
         p = self.pal
-        p[C_BLINK] = p[C_TONE] if on else (0, 0, 0)
-        p[C_BOXWB] = p[C_BOXW] if on else (0, 0, 0)
+        p[C_BLINK] = p[C_TONE] if on else p[0]
+        p[C_BOXWB] = p[C_BOXW] if on else p[0]
         for rgb in self.slots:
             i = self.slots[rgb]
-            p[i + 2] = p[i] if on else (0, 0, 0)
+            p[i + 2] = p[i] if on else p[0]
 
     # ---- layers --------------------------------------------------------
     def build(self, cfg):
@@ -199,7 +202,11 @@ class Screen:
         g.append(self.tg_cur); g.append(self.tg_nxt)
         self.tick_group = displayio.Group()
         self.left_group = displayio.Group()
-        self.tg_tick = None; self.tick_w = 0
+        self.tick_items = []; self.tick_segs = []; self.tick_bmps = {}
+        self.tick_last = None; self.tick_i = 0
+        s = str(cfg.get("ticker_sep", "+++")).strip()
+        self.tick_sep = ("   " + s + "   ") if s else "     "
+        self.tick_gap = not cfg.get("ticker_gapless", 1)
         self.left_w = 0; self.left = None
         if band:
             self.sfont = font_small if band >= 8 else font_mini
@@ -229,9 +236,13 @@ class Screen:
         display.refresh()
 
     # ---- content -------------------------------------------------------
-    def signet(self, bmp, x, y, w, h, label, f, fh, rgb, pill, state=0, ink="auto"):
-        """state: 0 normal, 1 dim, 2 blinking"""
-        if rgb == dp_cfg.TONE_BOX:
+    def signet(self, bmp, x, y, w, h, label, f, fh, rgb, pill, state=0, ink="auto", inv=False):
+        """state: 0 normal, 1 dim, 2 blinking. inv: a white box with the name in the line's colour."""
+        if inv:
+            slot = C_BOXWB if state == 2 else C_BOXWD if state == 1 else C_BOXW
+            if rgb == dp_cfg.TONE_BOX: c = C_BLINK if state == 2 else C_DIM if state == 1 else C_TONE
+            else: c = self.line_slot(rgb) + state
+        elif rgb == dp_cfg.TONE_BOX:
             slot = C_BLINK if state == 2 else C_DIM if state == 1 else C_TONE
             c = 0
         else:
@@ -261,14 +272,15 @@ class Screen:
             self.pal[C_L1] = self.pal[C_DIM] if p == 2 else t       # pulses
         else:
             self.pal[C_L1] = t                                      # builds up
-            self.pal[C_L2] = t if p >= 1 else (0, 0, 0)
-            self.pal[C_L3] = t if p >= 2 else (0, 0, 0)
+            self.pal[C_L2] = t if p >= 1 else self.pal[0]
+            self.pal[C_L3] = t if p >= 2 else self.pal[0]
 
     def draw_rows(self, bmp, rows, cfg):
         bmp.fill(0)
         W = self.W; f = self.font; fh = self.fh
         big = cfg["font"] == "large"
-        use_fill = cfg["badge"] == "fill" and cfg["font"] != "compact"
+        inv = cfg["badge"] == "invert"
+        use_fill = cfg["badge"] in ("fill", "invert") and cfg["font"] != "compact"
         sf = font_small if big else font_mini
         boxh = 9 if big else 7
         sfh = 7 if big else 5
@@ -304,7 +316,7 @@ class Screen:
             state = 2 if (bk and bm in ("line", "row")) else 1 if dimmed else 0
             rgb = r["rgb"]
             if rgb is None: text(bmp, f, r["line"], 0, y, C_BLINK if state == 2 else T, fh=fh)
-            elif use_fill: self.signet(bmp, 0, y, colw, boxh, r["line"], sf, sfh, rgb, r["pill"], state, ink)
+            elif use_fill: self.signet(bmp, 0, y, colw, boxh, r["line"], sf, sfh, rgb, r["pill"], state, ink, inv)
             elif rgb == dp_cfg.TONE_BOX: text(bmp, f, r["line"], 0, y, C_BLINK if state == 2 else T, fh=fh)
             else: text(bmp, f, r["line"], 0, y, self.line_slot(rgb) + state, fh=fh)
             right = W
@@ -341,10 +353,26 @@ class Screen:
     def draw_message(self, bmp, lines):
         # lines: [(text, palette index)], small type, top left
         bmp.fill(0)
-        f = font_small if (self.ch >= 8 * len(lines) and all(tw(font_small, t) <= self.W for t, c in lines)) else font_mini
+        def wrap(f):                        # a text too long for one line wraps at its spaces
+            out = []
+            for t, c in lines:
+                cur = ""
+                for w in t.split(" "):
+                    n = (cur + " " + w) if cur else w
+                    if cur and tw(f, n) > self.W:
+                        out.append((cur, c))
+                        cur = w
+                    else: cur = n
+                out.append((cur, c))
+            return out
+        out = wrap(font_small)
+        f = font_small
+        if 8 * len(out) > self.ch or any(tw(font_small, t) > self.W for t, c in out):
+            f = font_mini
+            out = wrap(f)
         p = 8 if f is font_small else 6
         y = 0
-        for t, c in lines:
+        for t, c in out[:max(1, self.ch // p)]:
             text(bmp, f, t, 0, y, c)
             y += p
 
@@ -388,27 +416,84 @@ class Screen:
         for i in range(len(widths)):
             label, rgb, pill = lines[i]
             if rgb is None: text(bmp, font_mini, label, x + 2, by + 1, C_TONE)
-            else: self.signet(bmp, x, by, widths[i], 7, label, font_mini, 5, rgb, pill, 0, ink)
+            else: self.signet(bmp, x, by, widths[i], 7, label, font_mini, 5, rgb, pill, 0, ink, cfg["badge"] == "invert")
             x += widths[i] + 2
         if wt: text(bmp, font_mini, wt, x + 3, by + 1, C_DIM)
 
-    def flip(self, scroll, on_frame=None):
-        """Shows what was drawn into self.nxt, optionally scrolling it in from below."""
-        H = self.H; ch = self.ch
-        if scroll:
+    def flip(self, kind, on_frame=None):
+        """Shows what was drawn into self.nxt. kind: scroll (up), down, left, right or random; anything else cuts."""
+        ml = self.ml
+        if kind == "random":
+            kind = ("scroll", "down", "left", "right", "dissolve", "blinds", "wipe")[(time.monotonic_ns() // 1000000) % 7]
+        if kind in ("dissolve", "blinds", "wipe"):
+            self._pieces(kind, on_frame)
+            return
+        if kind in ("scroll", "down", "left", "right"):
+            side = kind in ("left", "right")
+            span = self.W if side else self.ch
+            sg = -1 if kind in ("scroll", "left") else 1
             steps = 10
             for i in range(1, steps + 1):
                 p = 1 - i / steps
-                off = ch - int(ch * p * p * p + 0.5)
-                self.tg_cur.y = -off
-                self.tg_nxt.y = ch - off
+                off = span - int(span * p * p * p + 0.5)
+                if side:
+                    self.tg_nxt.y = 0
+                    self.tg_cur.x = ml + sg * off
+                    self.tg_nxt.x = ml + sg * (off - span)
+                else:
+                    self.tg_cur.y = sg * off
+                    self.tg_nxt.y = sg * (off - span)
                 if on_frame: on_frame()
                 display.refresh()
                 time.sleep(0.02)
+        self._swap()
+
+    def _pieces(self, kind, on_frame):
+        """Copies the new page over the old one piece by piece: small tiles in a scattered order (dissolve),
+        stripes that widen (blinds) or a curtain from the left (wipe). The same bitmap stays on screen."""
+        W = self.W; ch = self.ch
+        cur = self.cur; nxt = self.nxt
+        def put(x, y, x2, y2):
+            bitmaptools.blit(cur, nxt, x, y, x1=x, y1=y, x2=min(W, x2), y2=min(ch, y2))
+        def frame():
+            if on_frame: on_frame()
+            display.refresh()
+            time.sleep(0.02)
+        if kind == "dissolve":
+            nx = (W + 3) // 4
+            n = nx * ((ch + 3) // 4)
+            st = 37 if n % 37 else 41          # a stride that visits every tile once, far apart
+            per = max(1, n // 12)
+            for i in range(n):
+                j = (i * st) % n
+                put((j % nx) * 4, (j // nx) * 4, (j % nx) * 4 + 4, (j // nx) * 4 + 4)
+                if i % per == per - 1: frame()
+        elif kind == "blinds":
+            for s in range(8):
+                for x in range(s, W, 8): put(x, 0, x + 1, ch)
+                frame()
+        else:
+            for x in range(0, W, 8):
+                put(x, 0, x + 8, ch)
+                frame()
+        display.refresh()
+
+    def roll(self, px, on_frame=None):
+        """self.nxt holds the old page moved up by px: both travel that far, so the rows slide up."""
+        step = 1 if px <= 13 else 2
+        for off in range(step, px + 1, step):
+            self.tg_cur.y = -off
+            self.tg_nxt.y = px - off
+            if on_frame: on_frame()
+            display.refresh()
+            time.sleep(0.02)
+        self._swap()
+
+    def _swap(self):
         self.cur, self.nxt = self.nxt, self.cur
         self.tg_cur, self.tg_nxt = self.tg_nxt, self.tg_cur
-        self.tg_cur.y = 0
-        self.tg_nxt.y = H
+        self.tg_cur.x = self.ml; self.tg_cur.y = 0
+        self.tg_nxt.x = self.ml; self.tg_nxt.y = self.H
 
     # ---- status row ----------------------------------------------------
     def set_left(self, a, b, icon=False):
@@ -438,37 +523,56 @@ class Screen:
         if a: x = text(self.left, f, a, x, 0, C_TONE) + 3
         if b: text(self.left, f, b, x, 0, C_FAINT)
 
-    def set_ticker(self, s):
+    def set_ticker(self, items, reset=False):
+        """items: the texts that take turns in the ticker. It is an endless belt: each text comes in from the right
+        behind the one before it. A text that is dropped just does not come round again, a new one joins the round."""
         if not self.band: return
-        while len(self.tick_group): self.tick_group.pop()
-        self.tg_tick = None
-        if not s: return
-        w = min(tw(self.sfont, s) + 2, 1600)
-        bmp = displayio.Bitmap(w, self.sh, NCOL)
-        text(bmp, self.sfont, s, 0, 0, C_TICK)
-        self.tick_w = w
-        self.tg_tick = displayio.TileGrid(bmp, pixel_shader=self.pal, x=self.ml + self.W, y=self.sy)
-        self.tick_group.append(self.tg_tick)
+        self.tick_items = items
+        if reset:
+            while len(self.tick_group): self.tick_group.pop()
+            self.tick_segs = []
+        keep = items + [s[2] for s in self.tick_segs]
+        for k in list(self.tick_bmps):
+            if k not in keep: del self.tick_bmps[k]
 
     def step_ticker(self):
-        t = self.tg_tick
-        if t is None: return False
-        x = t.x - 1
-        if x < self.ml + (0 if self.only else self.left_w) - self.tick_w: x = self.ml + self.W
-        t.x = x
+        segs = self.tick_segs
+        it = self.tick_items
+        if not segs and not it: return False
+        for s in segs: s[0].x -= 1
+        if segs and segs[0][0].x + segs[0][1] <= self.ml + (0 if self.only else self.left_w):
+            self.tick_group.pop(0)       # scrolled out at the left
+            segs.pop(0)
+        x = segs[-1][0].x + segs[-1][1] if segs else self.ml + self.W
+        if it and x <= self.ml + self.W:
+            i = (it.index(self.tick_last) + 1) if self.tick_last in it else self.tick_i
+            i %= len(it)
+            if self.tick_gap and i == 0 and segs: return True       # not endless: a round leaves before the next one starts
+            t = it[i]
+            self.tick_last = t; self.tick_i = i
+            b = self.tick_bmps.get(t)
+            if b is None:
+                s = t + self.tick_sep
+                b = displayio.Bitmap(min(tw(self.sfont, s), 1600), self.sh, NCOL)
+                text(b, self.sfont, s, 0, 0, C_TICK)
+                self.tick_bmps[t] = b
+            tg = displayio.TileGrid(b, pixel_shader=self.pal, x=x, y=self.sy)
+            self.tick_group.append(tg)
+            segs.append([tg, b.width, t])
         return True
 
-    def set_pager(self, mode, n, cur, prog=0.0):
-        """mode: dots | bar (the current page is a small bar that fills up) | off"""
+    def set_pager(self, mode, n, cur, prog=0.0, pages=1, page=0):
+        """mode: dots | bar (the current station is a small bar that fills up) | off.
+        With several pages the current station's dot becomes one small mark per page."""
         W = self.W; H = self.H
-        if mode == "off" or n < 2:
+        if mode == "off" or (n < 2 and pages < 2):
             if self.pg is not None:
                 while len(self.pg_group): self.pg_group.pop()
                 self.pg = None; self.pg_key = None
             return
-        wide = 8 if mode == "bar" else 2
+        wide = 8 if mode == "bar" else (pages * 2 - 1 if pages > 1 else 2)
         w = (n - 1) * 4 + wide
-        key = (mode, n)
+        key = (mode, n, pages)
         if self.pg_key != key:
             while len(self.pg_group): self.pg_group.pop()
             if self.band:
@@ -492,6 +596,10 @@ class Screen:
                 fill = int(wide * prog + 0.5)
                 bitmaptools.fill_region(b, x, y0, x + wide, y1, C_FAINT)
                 if fill: bitmaptools.fill_region(b, x, y0, x + fill, y1, C_TONE)
+                x += wide + 2
+            elif i == cur and pages > 1:
+                for k in range(pages):
+                    bitmaptools.fill_region(b, x + k * 2, y0, x + k * 2 + 1, y1, C_TONE if k == page else C_DIM)
                 x += wide + 2
             else:
                 bitmaptools.fill_region(b, x, y0, x + 2, y1, C_TONE if i == cur else C_FAINT)

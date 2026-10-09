@@ -137,7 +137,15 @@ def parse(body, st, cfg):
         msg = str(j.get("msg", "")) if isinstance(j, dict) else ""
         if "oading" in msg: return None, "loading"
         return None, ("msg:" + msg[:40]) if msg else "nodata"
-    want = [x.strip().upper() for x in str(st.get("lines", "")).split(",") if x.strip()]
+    # "U2 S7" only these lines, "-M4" not this one, "U7:1" / "-U7:2" the same for one direction only
+    inc = []; exc = []
+    for x in str(st.get("lines", "")).upper().replace(",", " ").split():
+        neg = x[:1] in ("-", "!")
+        if neg: x = x[1:]
+        p = x.split(":")
+        try: rd = int(p[1]) if len(p) > 1 else 0
+        except Exception: rd = 0
+        if p[0]: (exc if neg else inc).append((p[0], rd))
     modes = [x.strip() for x in str(st.get("modes", "")).split(",") if x.strip()]
     wdir = int(st.get("dir", 0) or 0)
     strip = [x.strip() for x in str(cfg.get("strip", "")).split(",") if x.strip()]
@@ -149,9 +157,11 @@ def parse(body, st, cfg):
             line = str(ln.get("id", "") or ln.get("designation", ""))
             if line == "0": line = ""
             mode = str(ln.get("transport_mode", ""))
-            if want and line.upper() not in want: continue
             if modes and mode not in modes: continue
             dc = int(d.get("direction_code", 0) or 0)
+            key = line.upper().replace(" ", "")
+            if inc and not [1 for r in inc if r[0] == key and (not r[1] or not dc or r[1] == dc)]: continue
+            if [1 for r in exc if r[0] == key and (not r[1] or r[1] == dc)]: continue
             if wdir and dc and dc != wdir: continue
             delay = d.get("delay") or 0
             try: delay = int(delay)

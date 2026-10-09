@@ -5,7 +5,7 @@ import dp_cfg
 
 _app = None
 _HEX = "0123456789abcdefABCDEF"
-_LIGHT = ("brightness", "tone", "tone_hex", "ticker_color")          # changes that only need new colours, not new layers
+_LIGHT = ("brightness", "tone", "tone_hex", "ticker_color", "invert")          # changes that only need new colours, not new layers
 
 
 def unquote(s):
@@ -36,6 +36,7 @@ def _apply(changes, persist):
     saved = None
     if changed:
         if persist: saved = dp_cfg.save(_app.cfg)
+        if "stations" in changed: _app.cache = {}       # filters are applied when departures are read, so read them again
         if all(k in _LIGHT for k in changed):
             _app.scr.set_palette(_app.cfg)
             _app.t_sec = 0

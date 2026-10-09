@@ -10,12 +10,13 @@ This is a community project and not affiliated with T-Skylt Sweden AB. It gets i
 
 ## What it does
 
-* **Station rotation.** Any number of stations, each with a title showing its lines and your walking time. Or one mixed list of all stations.
-* **Line colors.** Filled signets, colored text or plain. The line colors of about 30 networks are built in, among them Berlin, Hamburg, Frankfurt, Vienna, Stockholm, Copenhagen, Paris, London and New York.
-* **Status row.** Clock, date and a ticker for your own text, messages from Home Assistant and the operator's service notices.
+* **Station rotation.** Up to ten stations with up to three pages each, each with a title showing its lines and your walking time. Or one mixed list of all stations.
+* **Line colors.** Filled signets, white signets with the name in the line's color, colored text or plain. The line colors of about 30 networks are built in, among them Berlin, Hamburg, Frankfurt, Vienna, Stockholm, Copenhagen, Paris, London and New York.
+* **Status row.** Clock, date and a ticker for your own text, messages from Home Assistant and the operator's service notices. The ticker runs as an endless belt or one round at a time, with a divider of your choice.
 * **Real-time mark.** Tells live departures from timetable ones, where the operator's data says so.
-* **Per station:** walking time, a filter by line, direction and vehicle type, and a fallback data source that steps in when the main one has no departures.
-* **Display:** three text sizes, ten LED tones or your own, brightness, margins, 180° rotation, a schedule per weekday, sleep while nothing departs.
+* **Per station:** walking time, lines to show or to hide (also per direction), a filter by direction and vehicle type, and a fallback data source that steps in when the main one has no departures.
+* **Display:** three text sizes, ten LED tones or your own, brightness, margins, 180° rotation, an inverted look, a schedule per weekday, sleep while nothing departs.
+* **Movement:** stations and pages can slide in from any side, dissolve in small tiles, open like blinds or wipe in. Departures that move up can roll into place.
 * **Home Assistant:** power, brightness, shown station, next departures and ticker messages through the [T-Skylt integration](https://github.com/jnbp/t-skylt). A ticker message can light up just the ticker while the display is off.
 
 ![The display in eight settings](docs/display.png)
@@ -65,7 +66,7 @@ Anything else can use the app's API directly:
 | `GET /api/set?next=1` | Next station |
 | `GET /api/set?pin=1` | Hold station 1 (`-1` = rotate again) |
 | `GET /api/set?brightness=3` | Change any setting. Add `&save=1` to keep it after a restart. |
-| `GET /api/message?text=Door%20opened&ttl=60&id=door` | Ticker message for 60 seconds. Several messages run in the ticker together, separated by +++, each until its own time is up. `ttl=0` keeps it until cleared, `wake=1` shows it even while the display is off. |
+| `GET /api/message?text=Door%20opened&ttl=60&id=door` | Ticker message for 60 seconds. Several messages take turns on the ticker, each until its own time is up. `ttl=0` keeps it until cleared, `wake=1` shows it even while the display is off. |
 | `GET /api/message?clear=1` | Clear the ticker messages (`&id=door` clears one) |
 | `GET /api/config`, `POST /api/config` | Read, or write and save, all settings as JSON |
 | `GET /api/debug` | Last request to the data server, memory, errors |
@@ -75,6 +76,7 @@ Anything else can use the app's API directly:
 * **Data.** Departures come from T-Skylt's data server, like in the stock app. Which operators exist and how good their data is depends on that server.
 * **Delays.** Most operators, Berlin included, deliver times that already contain the delay. The `+3` style only shows something where an operator sends the delay separately.
 * **Line colors.** They are in `departuresplus/colors.txt`, one row per network, and only the rows of your own stations are loaded. Where a network is missing, the signet is drawn in the board's LED tone. Additions are welcome.
+* **Lines field.** Entries are separated by a space or a comma. `U2 S7` shows only these lines, `-M4 -100` hides two, `-U7:2` hides U7 in direction 2 only. The small i next to the field on the settings page has more examples.
 * **Station titles.** A title shows the station's name exactly as it stands in the settings, so edit the name there to change it.
 * **Real-time mark.** Not every operator marks timetable-only departures. Berlin's *VBB/BVG* source does, *Berlin (Unofficial API)* does not.
 * **Tested on** a T-Skylt X (128×32) with MatrixBOX v0.97. The other sizes (XS, XL, 2X) and newer firmware are tested in the simulator only.
