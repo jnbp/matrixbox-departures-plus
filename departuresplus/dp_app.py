@@ -19,7 +19,7 @@ class App:
         self.net = dp_data.Net()
         self.scr = dp_draw.Screen(self.cfg)
         self.cache = {}        # station key -> {"deps", "t", "msg", "retry"}
-        self.msgs = []         # [id, text, ms to show or 0 for "until cleared", wakes the display, started at]
+        self.msgs = []         # [id, text, expires_ms or 0 for "until cleared", wakes the display]
         self.dev = []          # operator service messages
         self.dev_t = None
         self.power = True      # what the user or Home Assistant asked for
@@ -346,16 +346,13 @@ class App:
             self.scr.set_left(cs, date, c["st_icon"] and c["st_clock"])
             if w != self.scr.left_w: self.tick_s = None      # the ticker's left edge moved
             changed = True
-        head = self.prune()
+        self.prune()
         parts = []
-        if self.vis == 2:
-            parts = [head[1]] if (head and head[3]) else [m[1] for m in self.msgs if m[3] and not m[2]]
+        if self.vis == 2: parts = [m[1] for m in self.msgs if m[3]]
         elif c["st_ticker"]:
-            if head: parts = [head[1]]       # a timed message has the ticker to itself for its time
-            else:
-                if c["ticker_text"]: parts.append(c["ticker_text"])
-                parts += [m[1] for m in self.msgs if not m[2]]
-                if c["ticker_dev"]: parts += self.dev
+            if c["ticker_text"]: parts.append(c["ticker_text"])
+            parts += [m[1] for m in self.msgs]       # all of them together, each until its own time is up
+            if c["ticker_dev"]: parts += self.dev
         ts = (SEP.join(parts) + SEP) if parts else ""
         if ts != self.tick_s or force:
             self.tick_s = ts
@@ -389,26 +386,15 @@ class App:
         return (a <= t < b) if a < b else (t >= a or t < b)
 
     def prune(self):
-        """Timed messages form a queue: one at a time, each for its own time. Returns the one whose turn it is."""
         t = mono_ms()
-        head = None
-        for m in self.msgs:
-            if not m[2]: continue
-            if not m[4]: m[4] = t                    # its turn starts now
-            if t - m[4] < m[2]:
-                head = m
-                break
-            m[1] = ""                                # done
-        self.msgs = [m for m in self.msgs if m[1]]
-        return head
+        self.msgs = [m for m in self.msgs if not m[2] or m[2] > t]
 
     def woken(self):
         """A ticker message that asked for it lights the ticker of a switched-off display while it runs."""
         if not self.scr.band or not self.cfg["st_ticker"]: return False
-        head = self.prune()
-        if head and head[3]: return True
+        self.prune()
         for m in self.msgs:
-            if m[3] and not m[2]: return True
+            if m[3]: return True
         return False
 
     def apply_shown(self):
@@ -432,7 +418,7 @@ class App:
     def message(self, text, ttl=60, mid="", wake=False):
         text = str(text).replace("\n", " ").strip()[:120]
         mid = str(mid) or text
-        new = [mid, text, max(0, int(ttl)) * 1000, bool(wake), 0]
+        new = [mid, text, (mono_ms() + int(ttl) * 1000) if int(ttl) > 0 else 0, bool(wake)]
         for i in range(len(self.msgs)):
             if self.msgs[i][0] == mid:           # the same id again replaces the message where it stands
                 self.msgs[i] = new

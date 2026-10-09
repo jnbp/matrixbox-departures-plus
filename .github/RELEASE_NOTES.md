@@ -1,15 +1,10 @@
-# 0.7.0 - Line colors for 30 networks, settings export, ticker queue
-
-**New**
-
-* Line colors for about 30 networks instead of two, among them Hamburg, Frankfurt, Karlsruhe, Rhein-Ruhr, Vienna, Prague, Budapest, Copenhagen, Gothenburg, Oslo, Paris, Brussels, London and New York. Colors an operator sends itself (Switzerland) are used as well.
-* Export and import of all settings as a file, and a reset to the defaults that keeps your stations. All three are under *Advanced*.
-* Ticker messages with a duration now queue up: each one gets the ticker to itself for its time, one after the other.
+# 0.7.1 - Ticker messages run together again
 
 **Changed**
 
-* A station's title shows its name exactly as it stands in the settings, including a leading "U" or "S". Edit the name there if you want it shorter.
-* When the display is switched on again, it starts with the title of the first station.
+* Several ticker messages are shown together again, separated by +++, and each one disappears when its own time is up. 0.7.0 showed them one after another instead.
+
+Everything else is as in 0.7.0: line colors for about 30 networks, export, import and reset of the settings, station titles exactly as named in the settings, and a fresh start with the first station when the display is switched on.
 
 **Update**
 

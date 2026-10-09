@@ -125,7 +125,7 @@ def init(app):
     @ampule.route("/api/message", method="GET")
     def _message(request):
         # text=...&ttl=60 shows a message for 60 seconds, ttl=0 keeps it until cleared or restarted.
-        # Timed messages queue up: each gets the ticker to itself for its time, one after the other.
+        # Several messages run in the ticker together, each until its own time is up.
         # wake=1 lights the ticker of a switched-off display for as long as the message runs.
         p = request.params
         if "clear" in p:

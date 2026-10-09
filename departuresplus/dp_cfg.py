@@ -2,7 +2,7 @@
 # Pure data and helpers, no hardware access.
 import json
 
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 APP = "departuresplus"
 CFG_FILE = "departuresplus.json"
 

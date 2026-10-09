@@ -65,7 +65,7 @@ Anything else can use the app's API directly:
 | `GET /api/set?next=1` | Next station |
 | `GET /api/set?pin=1` | Hold station 1 (`-1` = rotate again) |
 | `GET /api/set?brightness=3` | Change any setting. Add `&save=1` to keep it after a restart. |
-| `GET /api/message?text=Door%20opened&ttl=60&id=door` | Ticker message for 60 seconds. Several timed messages queue up and are shown one after another, each for its own time. `ttl=0` keeps it until cleared, `wake=1` shows it even while the display is off. |
+| `GET /api/message?text=Door%20opened&ttl=60&id=door` | Ticker message for 60 seconds. Several messages run in the ticker together, separated by +++, each until its own time is up. `ttl=0` keeps it until cleared, `wake=1` shows it even while the display is off. |
 | `GET /api/message?clear=1` | Clear the ticker messages (`&id=door` clears one) |
 | `GET /api/config`, `POST /api/config` | Read, or write and save, all settings as JSON |
 | `GET /api/debug` | Last request to the data server, memory, errors |
