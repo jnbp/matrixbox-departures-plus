@@ -11,7 +11,7 @@ This is a community project and not affiliated with T-Skylt Sweden AB. It gets i
 ## What it does
 
 * **Station rotation.** Any number of stations, each with a title showing its lines and your walking time. Or one mixed list of all stations.
-* **Line colors.** Filled signets, colored text or plain. Berlin (VBB/BVG) and Stockholm (SL) colors are built in.
+* **Line colors.** Filled signets, colored text or plain. The line colors of about 30 networks are built in, among them Berlin, Hamburg, Frankfurt, Vienna, Stockholm, Copenhagen, Paris, London and New York.
 * **Status row.** Clock, date and a ticker for your own text, messages from Home Assistant and the operator's service notices.
 * **Real-time mark.** Tells live departures from timetable ones, where the operator's data says so.
 * **Per station:** walking time, a filter by line, direction and vehicle type, and a fallback data source that steps in when the main one has no departures.
@@ -22,7 +22,7 @@ This is a community project and not affiliated with T-Skylt Sweden AB. It gets i
 
 ## Install
 
-You need a board running MatrixBOX and about 100 KB of free storage. The board must not be connected to a computer by USB while you install, because its storage is read-only to its own code then.
+You need a board running MatrixBOX and about 110 KB of free storage. The board must not be connected to a computer by USB while you install, because its storage is read-only to its own code then.
 
 **Windows:** download `departuresplus-install.bat` from the [latest release](https://github.com/jnbp/matrixbox-departures-plus/releases/latest), double-click it and enter the board's IP address.
 
@@ -38,7 +38,7 @@ Both copy the app over Wi-Fi into `/departuresplus` on the board and start it. U
 
 ## Settings
 
-Open `http://<board ip>/` while the app is running. Changes apply immediately and are saved on the board.
+Open `http://<board ip>/` while the app is running. Changes apply immediately and are saved on the board. Under *Advanced* you can export the settings to a file, import them again and reset everything to the defaults.
 
 <p align="center">
   <img src="docs/settings.png" alt="The settings page" width="560">
@@ -65,7 +65,7 @@ Anything else can use the app's API directly:
 | `GET /api/set?next=1` | Next station |
 | `GET /api/set?pin=1` | Hold station 1 (`-1` = rotate again) |
 | `GET /api/set?brightness=3` | Change any setting. Add `&save=1` to keep it after a restart. |
-| `GET /api/message?text=Door%20opened&ttl=60&id=door` | Ticker message for 60 seconds. `ttl=0` keeps it until cleared, `wake=1` shows it even while the display is off. |
+| `GET /api/message?text=Door%20opened&ttl=60&id=door` | Ticker message for 60 seconds. Several timed messages queue up and are shown one after another, each for its own time. `ttl=0` keeps it until cleared, `wake=1` shows it even while the display is off. |
 | `GET /api/message?clear=1` | Clear the ticker messages (`&id=door` clears one) |
 | `GET /api/config`, `POST /api/config` | Read, or write and save, all settings as JSON |
 | `GET /api/debug` | Last request to the data server, memory, errors |
@@ -74,6 +74,8 @@ Anything else can use the app's API directly:
 
 * **Data.** Departures come from T-Skylt's data server, like in the stock app. Which operators exist and how good their data is depends on that server.
 * **Delays.** Most operators, Berlin included, deliver times that already contain the delay. The `+3` style only shows something where an operator sends the delay separately.
+* **Line colors.** They are in `departuresplus/colors.txt`, one row per network, and only the rows of your own stations are loaded. Where a network is missing, the signet is drawn in the board's LED tone. Additions are welcome.
+* **Station titles.** A title shows the station's name exactly as it stands in the settings, so edit the name there to change it.
 * **Real-time mark.** Not every operator marks timetable-only departures. Berlin's *VBB/BVG* source does, *Berlin (Unofficial API)* does not.
 * **Tested on** a T-Skylt X (128×32) with MatrixBOX v0.97. The other sizes (XS, XL, 2X) and newer firmware are tested in the simulator only.
 
