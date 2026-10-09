@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - departuresplus/dp_cfg.py
+      - .github/RELEASE_NOTES.md
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Publish a release for a new app version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v4
+
+      - name: Build the installers and create the release if it does not exist yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' departuresplus/dp_cfg.py)
+          tag="v$version"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists."
+            exit 0
+          fi
+          notes=.github/RELEASE_NOTES.md
+          title=$(head -n 1 "$notes" | sed 's/^# *//')
+          case "$title" in
+            "$version"*) ;;
+            *) echo "Release notes are not written for $version, skipping."; exit 0 ;;
+          esac
+          python3 tools/build_installers.py
+          tail -n +2 "$notes" > "$RUNNER_TEMP/body.md"
+          gh release create "$tag" --target "$GITHUB_SHA" --title "$title" --notes-file "$RUNNER_TEMP/body.md" \
+            dist/departuresplus-install.bat "dist/departuresplus-$version.zip"

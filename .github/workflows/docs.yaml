@@ -1,0 +1,57 @@
+name: README pictures
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - departuresplus/**
+      - tools/render_docs.py
+      - tools/demo_server.py
+      - .github/workflows/docs.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: docs
+
+jobs:
+  render:
+    name: Render the pictures from the app in the simulator
+    runs-on: ubuntu-latest
+    env:
+      TZ: Europe/Berlin
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v4
+
+      - name: Checkout the MatrixBOX firmware
+        uses: actions/checkout@v4
+        with:
+          repository: MatrixBOX-dev/matrixbox
+          ref: 1fe022949b83d27d078fc4bf1f068e23d0a3e662
+          path: _matrixbox
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install the simulator and a browser
+        run: |
+          pip install pillow playwright "git+https://github.com/MatrixBOX-dev/simulator@e16cacc4ff0b71b616faf4618199f7ce492ac70b"
+          playwright install --with-deps chromium
+
+      - name: Render
+        run: python3 tools/render_docs.py _matrixbox
+
+      - name: Commit the pictures
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Update the README pictures"
+          git pull --rebase
+          git push
