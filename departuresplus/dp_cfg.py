@@ -1,0 +1,208 @@
+# Departures Plus - configuration, strings and colour tables.
+# Pure data and helpers, no hardware access.
+import json
+
+VERSION = "0.6.3"
+APP = "departuresplus"
+CFG_FILE = "departuresplus.json"
+
+DEFAULTS = {
+    "stations": [],          # [{name, country, operator, id, walk, on, lines, dir, modes, fb_operator, fb_id}]
+    "mode": "rotate",        # rotate | merged
+    "tag": 1,                # merged list: first letters of the station next to each departure
+    "intro": 2,              # seconds, 0 = off
+    "intro_single": 0,       # with one station only: show its title again after every round
+    "dwell": 7,              # seconds of departures per station
+    "trans": "scroll",       # scroll | cut
+    "skip": 0,               # skip a station with nothing leaving within N min, 0 = never
+    "pager": "dots",         # dots | bar | off
+    "font": "normal",        # compact | normal | large
+    "max_rows": 0,           # 0 = as many as fit
+    "badge": "fill",         # fill | text | mono
+    "badge_ink": "auto",     # auto | black | white: the text inside a signet
+    "bus_color": 1,
+    "time_fmt": "min",       # min | tick | plain | clock
+    "now_text": "",          # empty = "now"
+    "now_hide": 0,           # show no time at all while a departure is leaving
+    "min_text": "",
+    "nodeps_text": "",
+    "delay": "incl",         # incl | plus
+    "delay_color": "red",    # red | tone: the "+3" of the plus style
+    "live": "off",           # off | wave | dot | bar: a mark behind real-time departures; tick: their ' pulses; approx: "~" in front of timetable ones
+    "live_anim": 1,          # the mark moves
+    "blink": "time",         # off | time | dest | line | row: what blinks while a departure is leaving
+    "walk": "dim",           # show | dim | hide
+    "strip_prefix": 1,       # drop "S+U ", "U ", "S " in front of destinations
+    "strip": "",             # comma separated text to remove from destinations
+    "abbr": "",              # comma separated long=short pairs, used when a destination does not fit
+    "line_len": 0,           # cut line names to N characters, 0 = off
+    "line_col": 3,           # the line column is at least N characters wide, 0 = as narrow as the lines shown
+    "gap": 3,                # pixels between the line column and the destination
+    "walk_text": "",         # walking time on the station title, % is the number of minutes
+    "days_text": "",         # seven weekday names, Monday first, comma separated
+    "status": "on",          # on | off: the row at the bottom
+    "st_clock": 1,
+    "st_icon": 0,            # small clock symbol in front of the time
+    "st_date": "wday",       # off | date | wday
+    "st_ticker": 1,
+    "ticker_color": "white", # white | tone
+    "ticker_text": "",       # always in the ticker
+    "ticker_dev": 1,         # show the operator's service messages in the ticker
+    "ticker_speed": "normal",  # fast | normal | slow
+    "tone": "amber",         # see dp_draw.TONES, or "custom" with tone_hex
+    "tone_hex": "#ff9900",
+    "margin_l": 0,           # unused columns at the left and right edge
+    "margin_r": 0,
+    "brightness": 2,         # 1..3
+    "button": "next",        # next | power
+    "sleep": 0,              # display off while nothing departs
+    "sched": 0,              # daily on/off times
+    "sched_on": "06:00",
+    "sched_off": "23:00",
+    "sched_days": "",        # Mon..Sun separated by ";": "" = the times above, "off", or "06:30-22:00"
+    "flip": 0,               # turn the picture by 180 degrees
+    "tx_power": 0,           # Wi-Fi transmit power in dBm, 0 = leave the board's own setting
+    "poll": 30,              # seconds between requests per station
+    "host": "data.t-skylt.se",
+    "port": 90,
+}
+
+CHOICES = {
+    "mode": ("rotate", "merged"), "trans": ("scroll", "cut"), "pager": ("dots", "bar", "off"),
+    "font": ("compact", "normal", "large"), "badge": ("fill", "text", "mono"),
+    "time_fmt": ("min", "tick", "plain", "clock"), "delay": ("incl", "plus"), "walk": ("show", "dim", "hide"),
+    "status": ("on", "off"), "st_date": ("off", "date", "wday"), "ticker_color": ("white", "tone"),
+    "tone": ("amber", "orange", "yellow", "white", "warm", "red", "green", "blue", "cyan", "pink", "custom"),
+    "button": ("next", "power"), "ticker_speed": ("fast", "normal", "slow"),
+    "blink": ("off", "time", "dest", "line", "row"), "live": ("off", "wave", "dot", "bar", "tick", "approx"), "delay_color": ("red", "tone"), "badge_ink": ("auto", "black", "white"),
+}
+LIMITS = {"intro": (0, 10), "dwell": (3, 60), "skip": (0, 60), "brightness": (1, 3), "poll": (20, 600),
+          "port": (1, 65535), "max_rows": (0, 16), "line_len": (0, 6), "line_col": (0, 6), "gap": (0, 12), "tx_power": (0, 20), "margin_l": (0, 12), "margin_r": (0, 12)}
+STRLEN = {"ticker_text": 160, "abbr": 240, "strip": 120, "sched_days": 100, "tone_hex": 7, "walk_text": 24, "days_text": 70}
+
+# Fixed words. Each can be replaced with the setting named <key>_text.
+STR = {"now": "now", "now_s": "0", "cancel": "cancelled", "cancel_s": "canc.", "min": "min", "walk": "% MIN WALK",
+       "days": "Mon,Tue,Wed,Thu,Fri,Sat,Sun", "nodeps": "No departures", "nodata": "No data",
+       "loading": "Loading...", "setup": "Set up at:"}
+# Settings saved before 0.5 had a display language instead of free texts: (walk, days, now, nodeps).
+OLD_LANG = {"de": ("% MIN ZU FUSS", "Mo,Di,Mi,Do,Fr,Sa,So", "sofort", "Keine Abfahrten"),
+            "sv": ("% MIN ATT GÅ", "Mån,Tis,Ons,Tor,Fre,Lör,Sön", "nu", "Inga avgångar")}
+
+# Applied in order, only while a destination is too wide for its column.
+ABBR = (("Zoologischer Garten", "Zoo"), ("Straße", "Str."), ("straße", "str."), ("Platz", "Pl."),
+        ("platz", "pl."), ("Rathaus", "Rath."), ("Bahnhof", "Bhf"), ("bahnhof", "bhf"), ("Hauptbhf", "Hbf"),
+        ("centrum", "C"), ("strand", "str."), ("Station", "Stn"))
+
+# Line colours as shown on a monitor (0xRRGGBB). The screen converts them for the LED panel.
+VBB = {
+    "U1": 0x7DAD4C, "U12": 0x7DAD4C, "U2": 0xDA421E, "U3": 0x16683D, "U4": 0xF0D722, "U5": 0x7E5330,
+    "U6": 0x8C6DAB, "U7": 0x528DBA, "U8": 0x224F86, "U9": 0xF3791D,
+    "S1": 0xDA6BA2, "S2": 0x007734, "S25": 0x007734, "S26": 0x007734, "S3": 0x0066AD, "S41": 0xAD5937,
+    "S42": 0xCB6418, "S45": 0xCD9C53, "S46": 0xCD9C53, "S47": 0xCD9C53, "S5": 0xEB7405, "S7": 0x816DA6,
+    "S75": 0x816DA6, "S8": 0x66AA22, "S85": 0x66AA22, "S9": 0x992746,
+}
+VBB_MODE = {"BUS": 0x5A0084, "TRAM": 0xBE1414, "SHIP": 0x528DBA, "TRAIN": 0xDA251D}
+SL = {"10": 0x0089CA, "11": 0x0089CA, "13": 0xD71D24, "14": 0xD71D24, "17": 0x179D4D, "18": 0x179D4D, "19": 0x179D4D}
+
+TONE_BOX = -1   # "no known colour": draw the signet in the board's own LED tone
+
+
+def line_color(operator, line, mode, api_color):
+    """Returns (rgb or TONE_BOX, rounded corners)."""
+    line = str(line).upper()
+    if operator in ("vbb", "be"):
+        if line in VBB: return VBB[line], line[:1] == "S"
+        if mode in VBB_MODE and mode != "METRO": return VBB_MODE[mode], mode in ("BUS", "TRAM")
+    elif operator == "sl":
+        if mode == "METRO" and line in SL: return SL[line], False
+    if api_color:
+        try:
+            c = str(api_color).replace("#", "")
+            if len(c) == 6: return int(c, 16), False
+        except Exception: pass
+    return TONE_BOX, mode in ("BUS", "TRAM")
+
+
+def pairs(text):
+    """ "Hauptbahnhof=Hbf, Flughafen=Flugh." -> [("Hauptbahnhof", "Hbf"), ...] """
+    out = []
+    for p in str(text).split(","):
+        kv = p.split("=")
+        if len(kv) == 2 and kv[0].strip(): out.append((kv[0].strip(), kv[1].strip()))
+    return out
+
+
+def hhmm(text, fallback):
+    """ "6:30" -> 390 minutes after midnight """
+    try:
+        p = str(text).split(":")
+        return max(0, min(1439, int(p[0]) * 60 + int(p[1])))
+    except Exception:
+        return fallback
+
+
+def _clean_station(s):
+    out = {"name": str(s.get("name", ""))[:40], "country": str(s.get("country", "")), "operator": str(s.get("operator", "")),
+           "id": str(s.get("id", "")), "on": 1 if s.get("on", 1) else 0, "lines": str(s.get("lines", ""))[:60],
+           "modes": str(s.get("modes", "")).upper()[:40],
+           "fb_operator": str(s.get("fb_operator", ""))[:20], "fb_id": str(s.get("fb_id", ""))[:60]}
+    try: out["walk"] = max(0, min(60, int(s.get("walk", 0))))
+    except Exception: out["walk"] = 0
+    try: out["dir"] = max(0, min(2, int(s.get("dir", 0))))
+    except Exception: out["dir"] = 0
+    return out
+
+
+def merge(cfg, new):
+    """Copies known keys from `new` into `cfg`, coercing and clamping. Returns changed keys."""
+    changed = []
+    for k in new:
+        if k not in DEFAULTS: continue
+        v = new[k]; d = DEFAULTS[k]
+        try:
+            if k == "stations":
+                if not isinstance(v, list): continue
+                v = [_clean_station(s) for s in v if isinstance(s, dict) and s.get("id")][:12]
+            elif k in CHOICES:
+                v = str(v)
+                if k == "status" and v in ("clock", "ticker"):      # settings saved by 0.2
+                    cfg["st_ticker"] = 1 if v == "ticker" else 0
+                    v = "on"
+                if k == "blink" and v in ("0", "1"): v = "time" if v == "1" else "off"
+                if v not in CHOICES[k]: continue
+            elif isinstance(d, int):
+                v = int(float(v))
+                if k in LIMITS: v = max(LIMITS[k][0], min(LIMITS[k][1], v))
+            else:
+                v = str(v).replace("\n", " ")[:STRLEN.get(k, 64)]
+        except Exception:
+            continue
+        if cfg.get(k) != v:
+            cfg[k] = v; changed.append(k)
+    return changed
+
+
+def load():
+    cfg = {}
+    for k in DEFAULTS:
+        cfg[k] = list(DEFAULTS[k]) if isinstance(DEFAULTS[k], list) else DEFAULTS[k]
+    try:
+        with open(CFG_FILE) as f: j = json.loads(f.read())
+        merge(cfg, j)
+        o = OLD_LANG.get(j.get("lang"))
+        if o and "walk_text" not in j:
+            cfg["walk_text"] = o[0]; cfg["days_text"] = o[1]
+            if not cfg["now_text"]: cfg["now_text"] = o[2]
+            if not cfg["nodeps_text"]: cfg["nodeps_text"] = o[3]
+    except Exception as e:
+        print("departuresplus: no saved config,", e)
+    return cfg
+
+
+def save(cfg):
+    try:
+        with open(CFG_FILE, "w") as f: f.write(json.dumps(cfg))
+        return True
+    except Exception as e:
+        print("departuresplus: could not save,", e)   # USB-connected boards are read-only to their own code
+        return False
