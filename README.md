@@ -23,6 +23,8 @@ This is a community project and not affiliated with T-Skylt Sweden AB. It gets i
 
 ![The display in eight settings](docs/display.png)
 
+![Station row, icons and colors](docs/features.png)
+
 ## Install
 
 You need a board running MatrixBOX and about 110 KB of free storage. The board must not be connected to a computer by USB while you install, because its storage is read-only to its own code then.

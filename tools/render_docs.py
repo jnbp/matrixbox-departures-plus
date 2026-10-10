@@ -105,6 +105,16 @@ def displays(app, tmp):
         ("Colored text instead of signets, times as 3'", shot(app, tmp, "text", badge="text", time_fmt="tick", stations=[ZOO, ALEX, HBF])),
         ("Any LED tone, here white, and no date", shot(app, tmp, "white", tone="white", st_date="off", stations=[HBF, ZOO, ALEX])),
     ]).save(os.path.join(DOCS, "display.png"))
+    A, H, Z = ALEX, HBF, ZOO
+    sheet([
+        ("Station row on top, status row below", shot(app, tmp, "srow", srow="top", srow_time=1, stations=[A, H, Z])),
+        ("Status row on top, clock on the right, icons left", shot(app, tmp, "sttop", st_pos="top", clock_pos="right", st_ticker=0, st_icons="left",
+                                                                 icon1="wc", icon1_c="red", icon2="washer", icon2_c="green", stations=[Z, A, H])),
+        ("Icons set by Home Assistant", shot(app, tmp, "icons", st_ticker=0, icon1="wc", icon1_c="red", icon2="battery", icon2_c="green",
+                                            icon3="sun", icon3_c="yellow", stations=[H, Z, A])),
+        ("A color per element", shot(app, tmp, "colors", c_time="#00ff66", c_dest="white", c_clock="#33aaff", c_date="#33aaff", st_bright=1,
+                                    c_ticker="#ff66cc", stations=[A, H, Z])),
+    ]).save(os.path.join(DOCS, "features.png"))
 
 
 def settings_page(app):
