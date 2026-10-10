@@ -10,11 +10,13 @@ This is a community project and not affiliated with T-Skylt Sweden AB. It gets i
 
 ## What it does
 
-* **Station rotation.** Up to ten stations with up to three pages each, each with a title showing its lines and your walking time. Or one mixed list of all stations.
+* **Station rotation.** Up to ten stations with up to five pages each, each with a title showing its lines and your walking time. Or one mixed list of all stations.
 * **Line colors.** Filled signets, white signets with the name in the line's color, colored text or plain. The line colors of about 30 networks are built in, among them Berlin, Hamburg, Frankfurt, Vienna, Stockholm, Copenhagen, Paris, London and New York.
-* **Status row.** Clock, date and a ticker for your own text, messages from Home Assistant and the operator's service notices. The ticker runs as an endless belt or one round at a time, with a divider of your choice.
+* **Status row.** Clock, date and a ticker for your own text, messages from Home Assistant and the operator's service notices. The ticker runs as an endless belt or one round at a time, with a divider of your choice. The row sits at the top or the bottom, the clock left, centered or right, and three icon places show symbols or letters that Home Assistant sets, such as a red WC while the bathroom is taken.
 * **Real-time mark.** Tells live departures from timetable ones, where the operator's data says so.
+* **Station row:** the station's name above or below the departures, with its lines and the time if you like. It stays still while a station's pages turn.
 * **Per station:** walking time, lines to show or to hide (also per direction), a filter by direction and vehicle type, and a fallback data source that steps in when the main one has no departures.
+* **Colors:** destinations, times, line names, station title, station row, clock, date, ticker and page indicator can each have their own color.
 * **Display:** three text sizes, ten LED tones or your own, brightness, margins, 180° rotation, an inverted look, a schedule per weekday, sleep while nothing departs.
 * **Movement:** stations and pages can slide in from any side, dissolve in small tiles, open like blinds or wipe in. Departures that move up can roll into place.
 * **Home Assistant:** power, brightness, shown station, next departures and ticker messages through the [T-Skylt integration](https://github.com/jnbp/t-skylt). A ticker message can light up just the ticker while the display is off.
@@ -66,6 +68,7 @@ Anything else can use the app's API directly:
 | `GET /api/set?next=1` | Next station |
 | `GET /api/set?pin=1` | Hold station 1 (`-1` = rotate again) |
 | `GET /api/set?brightness=3` | Change any setting. Add `&save=1` to keep it after a restart. |
+| `GET /api/set?icon1=wc&icon1_c=red` | Icon place 1 to 3: a symbol (`wc`, `door`, `window`, `light`, `power`, `house`, `key`, `bell`, `washer`, `dishes`, `dryer`, `coffee`, `trash`, `water`, `battery`, `temp`, `heart`, `mail`, `sun`, `cloud`, `rain`, `snow`, `storm`, `moon`, `dot`) or up to two letters; a leading `/` shows letters instead of a symbol (`/wc`). The color is empty for the LED tone, a name or `#RRGGBB`. An empty value clears the place. |
 | `GET /api/message?text=Door%20opened&ttl=60&id=door` | Ticker message for 60 seconds. Several messages take turns on the ticker, each until its own time is up. `ttl=0` keeps it until cleared, `wake=1` shows it even while the display is off. |
 | `GET /api/message?clear=1` | Clear the ticker messages (`&id=door` clears one) |
 | `GET /api/config`, `POST /api/config` | Read, or write and save, all settings as JSON |
@@ -87,13 +90,10 @@ Anything else can use the app's API directly:
 git clone https://github.com/MatrixBOX-dev/matrixbox
 git clone https://github.com/jnbp/matrixbox-departures-plus
 pip install git+https://github.com/MatrixBOX-dev/simulator
-cp -r matrixbox-departures-plus/departuresplus matrixbox/apps/
-python3 matrixbox-departures-plus/tools/demo_server.py &          # made-up departures for three Berlin stations
-matrixbox app matrixbox/apps/departuresplus --size X              # terminal 1
-matrixbox simulator                                               # terminal 2
+python3 matrixbox-departures-plus/tools/simulate.py matrixbox --size X     # or XS, XL, 2X
 ```
 
-The settings page is then at `http://127.0.0.1:8080/`. To use the demo data, open *Advanced* there and set the data server to `127.0.0.1`, port `9090`, then search for "Berlin".
+This starts made-up departures for three Berlin stations, the app and the simulator window. The settings page is at `http://127.0.0.1:8080/`. Ctrl+C ends everything.
 
 The pictures on this page are rendered from the app by `tools/render_docs.py`, and `tools/build_installers.py` builds the release files.
 
