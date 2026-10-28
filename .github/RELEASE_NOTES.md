@@ -1,8 +1,13 @@
-# 0.12.1 - Each preset keeps its own logo
+# 0.12.2 - Preset logos you can see, a complete settings export
+
+**Fixed**
+
+* **Saving a preset after picking a new logo:** the new picture was only a preview until you pressed Upload, so the preset kept the logo that was still on the board. Saving a preset now stores a logo that is still in preview first.
 
 **New**
 
-* **Logo in presets:** saving a preset now keeps the logo too, so "Day" and "Evening" can each bring their own picture. Loading a preset puts its logo in place, or removes the logo if it had none. Presets saved with 0.12.0 have no logo of their own and leave the current one as it is; save them again to add it.
+* **Each preset shows its logo:** the preset list on the settings page shows a small picture of the logo kept with each preset, or says that it has none.
+* **Complete settings export:** Export settings now writes one file with the settings, all presets with their logos, and the current logo. Import settings puts them all back; presets with the same name are replaced, others stay.
 
 **Update**
 

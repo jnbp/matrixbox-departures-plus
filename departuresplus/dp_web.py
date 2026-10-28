@@ -44,7 +44,20 @@ def _presets(p):
     """save=NAME stores the current settings, load=NAME switches to them, delete=NAME removes them."""
     out = {"ok": True}
     ps = dp_cfg.presets()
-    name = (p.get("save") or p.get("load") or p.get("delete") or "").strip()[:24]
+    name = (p.get("save") or p.get("load") or p.get("delete") or p.get("logo") or "").strip()[:24]
+    if "get" in p:           # one preset with its logo, for the settings export
+        import binascii
+        pr = ps.get(p["get"])
+        if not isinstance(pr, dict): return {"ok": False, "error": "no preset called " + p["get"]}
+        fn = pr.get("_logo") or ""
+        d = dp_cfg._bytes(fn) if fn else None
+        return {"ok": True, "name": p["get"], "settings": {k: v for k, v in pr.items() if k != "_logo"},
+                "hex": binascii.hexlify(d).decode() if d else ""}
+    if "logo" in p:          # the logo kept with one preset, for its preview on the settings page
+        import binascii
+        fn = (ps.get(name) or {}).get("_logo") or ""
+        d = dp_cfg._bytes(fn) if fn else None
+        return {"ok": True, "name": name, "hex": binascii.hexlify(d).decode() if d else ""}
     if "save" in p and name:
         if name not in ps and len(ps) >= 12: return {"ok": False, "error": "12 presets at most"}
         new = dp_cfg.preset_of(_app.cfg)
@@ -67,6 +80,7 @@ def _presets(p):
         out["changed"], out["saved"] = _apply(new, True)
     _app.preset_names = sorted(ps)
     out["presets"] = _app.preset_names
+    out["logos"] = [k for k in _app.preset_names if isinstance(ps[k], dict) and ps[k].get("_logo")]
     out["active"] = _app.cfg["preset"]
     return out
 
@@ -149,6 +163,26 @@ def init(app):
         p = {}
         for k in request.params: p[k] = unquote(request.params[k])
         return _json(_presets(p))
+
+    @_route("/api/presets", method="POST")
+    def _presets_put(request):
+        # put=NAME with {"settings": {...}, "hex": "<logo>"}: a preset from a settings import
+        import binascii
+        p = {}
+        for k in request.params: p[k] = unquote(request.params[k])
+        name = p.get("put", "").strip()[:24]
+        try: j = json.loads(request.body)
+        except Exception: return _json({"ok": False, "error": "bad json"})
+        if not name or not isinstance(j, dict) or not isinstance(j.get("settings"), dict): return _json({"ok": False, "error": "nothing to store"})
+        ps = dp_cfg.presets()
+        if name not in ps and len(ps) >= 12: return _json({"ok": False, "error": "12 presets at most"})
+        new = {k: v for k, v in j["settings"].items() if k in dp_cfg.DEFAULTS and k not in dp_cfg.NOPRESET}
+        try: new["_logo"] = dp_cfg.preset_logo_save(ps, name, binascii.unhexlify(j.get("hex") or ""))
+        except Exception as e: return _json({"ok": False, "error": "logo: " + str(e)})
+        ps[name] = new
+        ok = dp_cfg.presets_save(ps)
+        _app.preset_names = sorted(ps)
+        return _json({"ok": ok, "presets": _app.preset_names})
 
     @_route("/api/debug", method="GET")
     def _debug(request):

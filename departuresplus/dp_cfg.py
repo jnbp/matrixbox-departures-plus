@@ -2,7 +2,7 @@
 # Pure data and helpers, no hardware access.
 import json
 
-VERSION = "0.12.1"
+VERSION = "0.12.2"
 APP = "departuresplus"
 CFG_FILE = "departuresplus.json"
 TS_HOST = "data.t-skylt.se"   # T-Skylt's data server
@@ -320,11 +320,11 @@ def _drop(path):
     except OSError: pass
 
 
-def preset_logo_save(ps, name):
-    """Copies the current logo next to the preset. -> its file name, or "" without a logo."""
+def preset_logo_save(ps, name, d=-1):
+    """Copies the current logo (or the bytes d) next to the preset. -> its file name, or "" without a logo."""
     old = (ps.get(name) or {}).get("_logo") or ""
-    d = _bytes(LOGO_FILE)
-    if d is None:
+    if d == -1: d = _bytes(LOGO_FILE)
+    if not d:
         if old: _drop(old)
         return ""
     fn = old
