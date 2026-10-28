@@ -14,6 +14,14 @@ class App:
     def __init__(self):
         self.cfg = dp_cfg.load()
         self.net = dp_data.Net()
+        self.net.idle = self.on_wait
+        self.t_loop = 0; self.stall = 0     # the longest pause between two passes, for /api/debug
+        self.slow = []; self.depth = 0; self.inside = 0       # what took long: [(at, ms, what)]
+        self.web = []                        # web requests since the last pass: [(path, ms)]
+        self.preset_names = sorted(dp_cfg.presets())
+        for name, what in (("fetch", "fetch"), ("fetch_dev", "service messages"), ("turn", "page turn"), ("update_page", "redraw"),
+                           ("restart", "rebuild"), ("show", "station change"), ("status_update", "status row"), ("logo_start", "logo")):
+            setattr(self, name, self._timed(getattr(self, name), what))
         self.scr = dp_draw.Screen(self.cfg)
         self.cache = {}        # station key -> {"deps", "t", "msg", "retry"}
         self.msgs = []         # [id, text, expires_ms or 0 for "until cleared", wakes the display]
@@ -102,7 +110,7 @@ class App:
         deps, msg = (None, "nodata") if body is None else dp_data.parse(body, st, c)
         body = None
         if bvg and deps is None:          # automatic: T-Skylt has nothing, ask the BVG API
-            gc.collect()
+            self._gc()
             d2, m2 = self._bvg(st, sid)
             if d2 is not None: return d2, m2
             self.via = "tskylt"
@@ -113,10 +121,10 @@ class App:
         tls, h, p, pre = dp_data.split_url(self.cfg["bvg_url"] or dp_cfg.BVG_URL)
         pages = (st.get("pages", 0) or self.cfg["pages"]) if self.cfg["mode"] != "merged" else self.cfg["pages"]
         n = max(10, min(30, self.rows_max() * pages * 2))
-        gc.collect()
+        self._gc()
         body = self.net.get(h, p, dp_data.bvg_path(pre, sid, st, n), limit=40000, tls=tls)
         if body is None: return None, "nodata"
-        gc.collect()
+        self._gc()
         return dp_data.parse_bvg(body, st, self.cfg, self.net)
 
     def _upcoming(self, deps, st):
@@ -130,13 +138,14 @@ class App:
         return n
 
     def fetch(self, st):
-        gc.collect()
+        self._gc()
         k = self.key(st)
         e = self.cache.get(k)
         if e is None:
-            e = {"deps": None, "t": 0, "msg": "loading", "retry": 0, "src": "main", "op": st["operator"], "loads": 0}
+            e = {"deps": None, "t": 0, "msg": "loading", "retry": 0, "src": "main", "op": st["operator"], "loads": 0, "ok": 0}
             self.cache[k] = e
         now = mono_ms()
+        self.age_out(e, now)
         e["t"] = now
         deps, msg = self._get(st, st["operator"], st["id"])
         src = "main"; op = st["operator"]; via = self.via
@@ -145,7 +154,7 @@ class App:
         # a station that never finishes loading, or a list that has gone stale.
         n = self._upcoming(deps, st)
         if st.get("fb_id") and n < (1 if self.cfg["calm"] else 2) and (msg != "loading" or e["loads"] >= 3):
-            gc.collect()
+            self._gc()
             d2, m2 = self._get(st, st.get("fb_operator") or st["operator"], st["fb_id"])
             if self._upcoming(d2, st) > n:      # the fallback has more to show; the main source is asked first again next time
                 deps = d2; msg = None; src = "fallback"; op = st.get("fb_operator") or st["operator"]; via = self.via
@@ -161,9 +170,45 @@ class App:
             if e["deps"] is None: e["msg"] = msg
             e["retry"] = now + ((4000 if e["loads"] < 8 else 15000) if msg == "loading" else 20000)
             return
-        e["err"] = 0
+        e["err"] = 0; e["ok"] = now
         e["deps"] = deps; e["msg"] = None; e["retry"] = 0; e["src"] = src; e["op"] = op; e["via"] = via
-        gc.collect()
+        self._gc()
+
+    def age_out(self, e, now):
+        """A list older than ten minutes is not shown any more: the station loads again, with its spinner,
+        instead of showing "No departures" for yesterday's trains while the first answer of the day is pending."""
+        if e["deps"] is not None and now - e.get("ok", 0) > 600000:
+            e["deps"] = None; e["msg"] = "loading"; e["retry"] = 0; e["loads"] = 0; e["err"] = 0; e["n0"] = 0
+
+    def _gc(self):
+        if not hasattr(gc, "mem_free") or gc.mem_free() < 300000: gc.collect()
+
+    def _timed(self, fn, what):
+        def run(*a):
+            t = mono_ms(); self.depth += 1
+            try: return fn(*a)
+            finally:
+                self.depth -= 1; d = mono_ms() - t
+                if not self.depth: self.inside += d
+                if d > 200:
+                    w = what + (" " + a[0]["name"] if (what == "fetch" and a and isinstance(a[0], dict)) else "")
+                    self._slow(d, w)
+        return run
+
+    def web_note(self, path, ms):
+        self.web.append((path, ms))
+        if len(self.web) > 10: self.web.pop(0)
+
+    def load_preset(self, name):
+        """Loads a saved preset: its settings replace the current ones, the stations stay."""
+        p = dp_cfg.presets().get(name)
+        if not isinstance(p, dict): return False
+        p = dict(p); p["preset"] = name
+        return p
+
+    def _slow(self, ms, what):
+        self.slow.append((mono_ms() // 1000, ms, what))
+        if len(self.slow) > 15: self.slow.pop(0)
 
     def stale(self, st):
         e = self.cache.get(self.key(st))
@@ -441,6 +486,14 @@ class App:
     def on_frame(self):
         self.scr.step_ticker()
 
+    def on_wait(self):
+        """While a request waits for its answer: keep the ticker going at its own pace."""
+        now = mono_ms()
+        sp = self.cfg["ticker_speed"]
+        if self.vis and now - self.t_tick >= (60 if sp == "slow" else 18 if sp == "fast" else 35):
+            self.t_tick = now
+            if self.scr.step_ticker(): display.refresh()
+
     def next_station(self):
         act = self.active()
         if len(act) < 2: return
@@ -559,6 +612,8 @@ class App:
             self.t0 = mono_ms()
             self.t_logo = self.t_wake = mono_ms()
             if self.cfg["power_wait"]: self.cache = {}     # nothing was fetched while dark: wait for fresh data
+            else:
+                for e in self.cache.values(): self.age_out(e, self.t_wake)
             if self.cfg["mode"] == "rotate" and self.active():
                 self.phase = "none"              # back on: start over with the first station and its title
                 self.show(0 if self.pin < 0 else self.pin, False)
@@ -625,6 +680,15 @@ class App:
 
     def tick(self):
         now = mono_ms()
+        if self.t_loop:
+            gap = now - self.t_loop
+            if gap > self.stall: self.stall = gap
+            if gap - self.inside > 250:
+                w = {}
+                for path, ms in self.web: w[path] = w.get(path, 0) + 1
+                self._slow(gap - self.inside, ("web requests: " + ", ".join([k + (" x" + str(n) if n > 1 else "") for k, n in w.items()])) if w
+                           else "outside the app: MatrixBOX itself")
+        self.t_loop = now; self.inside = 0; self.web = []
         scr = self.scr
         act = self.active()
         second = now - self.t_sec >= 1000
@@ -748,7 +812,7 @@ class App:
     def state(self):
         act = self.active()
         now = self.net.now()
-        out = {"app": dp_cfg.APP, "version": dp_cfg.VERSION, "power": 1 if self.power else 0, "shown": 1 if self.shown else 0,
+        out = {"preset": self.cfg["preset"], "presets": self.preset_names, "app": dp_cfg.APP, "version": dp_cfg.VERSION, "power": 1 if self.power else 0, "shown": 1 if self.shown else 0,
                "asleep": 1 if self.asleep else 0, "brightness": self.cfg["brightness"], "mode": self.cfg["mode"], "phase": self.phase,
                "index": self.i, "page": self.pg, "pinned": self.pin, "station": act[self.i]["name"] if act and self.i < len(act) else "",
                "time": (self.clock_s or "").split("|")[0], "ticker_text": self.cfg["ticker_text"], "messages": [m[1] for m in self.msgs], "width": self.scr.W, "height": self.scr.H, "stations": [],
@@ -774,7 +838,10 @@ class App:
         return out
 
     def debug(self):
-        return {"version": dp_cfg.VERSION, "uptime": mono_ms() // 1000, "free": gc.mem_free() if hasattr(gc, "mem_free") else -1, "clock_offset": self.net.t_off,
+        now = mono_ms() // 1000
+        p = [{"seconds_ago": now - a, "ms": m, "doing": w} for a, m, w in self.slow]
+        self.slow = []; st = self.stall; self.stall = 0       # every look starts a fresh count
+        return {"slow": p, "longest_pause_ms": st, "version": dp_cfg.VERSION, "uptime": mono_ms() // 1000, "free": gc.mem_free() if hasattr(gc, "mem_free") else -1, "clock_offset": self.net.t_off,
                 "last_request": self.net.last, "notes": self.notes,
                 "cache": [{"key": k, "count": len(v["deps"]) if v["deps"] is not None else None, "msg": v["msg"], "src": v["src"],
                            "age": (mono_ms() - v["t"]) // 1000} for k, v in self.cache.items()]}

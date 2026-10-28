@@ -1,0 +1,1 @@
+{"description":"Departures with station rotation, line colors, a ticker and a Home Assistant API","emoji":"🚇","v0.12.0":["Presets: save settings under a name, switch from Home Assistant","Departures right away after the night","Smoother ticker while data loads","More characters: arrows, euro sign, degrees"]}

@@ -1,13 +1,16 @@
-# 0.11.0 - Settings page in the MatrixBOX design, scrolling destinations
+# 0.12.0 - Presets, departures right away after the night, smoother ticker
+
+**Fixed**
+
+* **The first round after the night was empty:** with the display off overnight, the first round in the morning showed "No departures" at every station, because the stations still held the evening's list while their first answer of the day was on its way. A list older than ten minutes now counts as gone: the station shows its title with the loading mark until fresh departures are in, and all stations are loaded during the first minute.
+* **Smoother ticker:** while the board waits for the data server to answer, the ticker keeps moving instead of standing still. Each request also skips a full memory clean-up the board does not need, and the settings page asks the board less often, and not at all while it is in a background tab. `/api/debug` lists everything that took longer than 0.2 seconds since the last look, so a remaining stutter can be traced.
+* **Ticker divider:** the divider only appears between two texts, so the last round of a message ends without it.
+* **Clock flush with the lines:** a clock starting with 1 sat one column further right than the line column, as the 1 has an empty column on its left. It now lines up.
 
 **New**
 
-* **Settings page in the MatrixBOX design:** cards with small section titles and the same switches, segmented buttons, input fields and buttons as the built-in apps, at the same page width. Wide controls such as sliders get their own line under their label.
-* **Scrolling destinations:** a destination too long for its column, even after the abbreviations, can scroll to its end, slow, medium or fast, and then jump or scroll back to its start (Destination names, off by default).
-* **Destinations without the district:** "Lankwitz, Halbauer Weg" becomes "Halbauer Weg" (Destination names, on by default).
-* **Cancelled departures:** show them or leave them out, with your own text instead of "cancelled" and your own color instead of red (Departure rows and Colors).
-* **Arrows:** the ⟳ and ⟲ of Berlin's Ringbahn S41 and S42, ↻ ↺, → and ← now show up instead of a gap, in all three text sizes, and a "->" in a destination becomes a real arrow.
-* **Data source setting:** T-Skylt's data server stays the default. For VBB and Berlin stations the public VBB/BVG API ([v6.bvg.transport.rest](https://v6.bvg.transport.rest/), run by volunteers) can be used instead or as a stand-in, and a server of your own works too. With the BVG API the Direction field and `:1`/`:2` in Lines have no effect, and each update takes a little longer.
+* **Presets:** save all settings under a name, e.g. "Day" and "Evening", and switch between them on the settings page. A preset keeps everything except the stations and the data source. Home Assistant switches with `/api/set?preset=Evening`.
+* More characters on the display and in the ticker: ↑ ↓ € ° • … = @ $ ;, a visible comma, brackets, and typographic quotes, dashes and « » are shown with the nearest character the fonts have.
 
 **Update**
 

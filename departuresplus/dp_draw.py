@@ -47,15 +47,33 @@ ICONS = {"wc": (48, 48, 63, 62, 28, 28), "door": (62, 34, 34, 38, 34, 62), "wind
 # Characters the board's fonts lack, by font height: the Ringbahn's \u27f3 \u27f2 (and \u21bb \u21ba), \u2192 and \u2190.
 EXTRA = {8: {'⟳': [7, 29, 35, 71, 64, 65, 34, 28, 0], '⟲': [7, 92, 98, 113, 1, 65, 34, 28, 0], '→': [7, 0, 4, 2, 127, 2, 4, 0, 0], '←': [7, 0, 16, 32, 127, 32, 16, 0, 0], '↻': [7, 29, 35, 71, 64, 65, 34, 28, 0], '↺': [7, 92, 98, 113, 1, 65, 34, 28, 0]}, 14: {'⟳': [10, 244, 398, 799, 768, 771, 771, 771, 771, 390, 252, 0, 0, 0, 0], '⟲': [10, 188, 454, 995, 3, 771, 771, 771, 771, 390, 252, 0, 0, 0, 0], '→': [10, 0, 24, 12, 6, 1023, 1023, 6, 12, 24, 0, 0, 0, 0, 0], '←': [10, 0, 96, 192, 384, 1023, 1023, 384, 192, 96, 0, 0, 0, 0, 0], '↻': [10, 244, 398, 799, 768, 771, 771, 771, 771, 390, 252, 0, 0, 0, 0], '↺': [10, 188, 454, 995, 3, 771, 771, 771, 771, 390, 252, 0, 0, 0, 0]}, 5: {'⟳': [5, 13, 19, 16, 17, 14], '⟲': [5, 22, 25, 1, 17, 14], '→': [5, 4, 2, 31, 2, 4], '←': [5, 4, 8, 31, 8, 4], '↻': [5, 13, 19, 16, 17, 14], '↺': [5, 22, 25, 1, 17, 14]}}
 
+for _h in EXTRA: EXTRA[_h].update({8: {'€': [6, 14, 17, 60, 16, 60, 17, 14, 0], '°': [4, 6, 9, 9, 6, 0, 0, 0, 0], '↑': [5, 4, 14, 21, 4, 4, 4, 4, 0], '↓': [5, 4, 4, 4, 4, 21, 14, 4, 0], '•': [3, 0, 0, 2, 7, 2, 0, 0, 0], '…': [5, 0, 0, 0, 0, 0, 0, 21, 0], '=': [5, 0, 0, 31, 0, 31, 0, 0, 0], '@': [6, 30, 33, 45, 43, 46, 32, 30, 0]}, 5: {'€': [4, 7, 8, 14, 8, 7], '°': [3, 7, 5, 7, 0, 0], '↑': [3, 2, 7, 2, 2, 2], '↓': [3, 2, 2, 2, 7, 2], '•': [2, 0, 3, 3, 0, 0], '…': [5, 0, 0, 0, 0, 21], '=': [3, 0, 7, 0, 7, 0], '@': [5, 14, 19, 21, 23, 12]}, 14: {'€': [8, 31, 49, 96, 252, 96, 252, 96, 96, 49, 31, 0, 0, 0, 0], '°': [5, 14, 27, 17, 27, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0], '↑': [8, 24, 60, 126, 219, 24, 24, 24, 24, 24, 24, 0, 0, 0, 0], '↓': [8, 24, 24, 24, 24, 24, 24, 219, 126, 60, 24, 0, 0, 0, 0], '•': [4, 0, 0, 0, 6, 15, 15, 6, 0, 0, 0, 0, 0, 0, 0], '…': [8, 0, 0, 0, 0, 0, 0, 0, 0, 219, 219, 0, 0, 0, 0], '=': [6, 0, 0, 0, 63, 63, 0, 63, 63, 0, 0, 0, 0, 0, 0], '@': [8, 126, 195, 222, 219, 219, 219, 222, 192, 192, 126, 0, 0, 0, 0]}}[_h])
+# Glyphs the board's fonts draw wrongly: the comma below the row, empty brackets.
+FIX = {8: {',': [2, 0, 0, 0, 0, 0, 1, 1, 2], '(': [2, 1, 2, 2, 2, 2, 2, 1, 0], ')': [2, 2, 1, 1, 1, 1, 1, 2, 0], ';': [2, 0, 0, 1, 0, 0, 1, 1, 2], '"': [3, 5, 5, 0, 0, 0, 0, 0, 0], '$': [5, 4, 15, 20, 14, 5, 30, 4, 0]}, 5: {'(': [2, 1, 2, 2, 2, 1], ')': [2, 2, 1, 1, 1, 2], '"': [3, 5, 5, 0, 0, 0]}, 14: {'(': [4, 3, 6, 12, 12, 12, 12, 12, 12, 6, 3, 0, 0, 0, 0], ')': [4, 12, 6, 3, 3, 3, 3, 3, 3, 6, 12, 0, 0, 0, 0], ';': [3, 0, 0, 0, 3, 3, 0, 0, 3, 3, 6, 0, 0, 0, 0]}}
+# Characters that look close enough to one the fonts have.
+ALIAS = {"\u201e": '"', "\u201c": '"', "\u201d": '"', "\u2018": "'", "\u2019": "'", "\u201a": ",", "\u2014": "\u2013", "\u2013": "-",
+         "\u00ab": "<", "\u00bb": ">", "\u00b2": "2", "\u00b3": "3", "\u00a0": " ", "\u2009": " ", "\u202f": " "}
+
 
 def _glyph(font, ch, low):
     if low: ch = ch.lower()
-    g = font.get(ch)
-    if g is None:
-        x = EXTRA.get(font["fontheight"])
-        g = x.get(ch) if x else None
-        if g is None: g = font.get("_")
-    return g
+    for k in range(3):
+        g = FIX.get(font["fontheight"], {}).get(ch) or font.get(ch)
+        if g is None:
+            x = EXTRA.get(font["fontheight"])
+            g = x.get(ch) if x else None
+        if g is not None or ch not in ALIAS: break
+        ch = ALIAS[ch]
+    return g if g is not None else font.get("_")
+
+
+def _lead(font, s):
+    """Empty columns at the left of the first letter, such as in 1."""
+    g = _glyph(font, s[0], font is font_mini) if s else None
+    if not g: return 0
+    w = g[0]
+    r = [v for v in g[1:] if isinstance(v, int) and v]
+    return min([w - v.bit_length() for v in r]) if r else 0
 
 
 # Real-time marks. The digits are the parts that light up one after the other when animated.
@@ -872,6 +890,7 @@ class Screen:
             if v[0] == "/" and len(v) > 1: icp.append(self._itext(v[1:3], c, ist))      # /wc: the letters, not the symbol
             else: icp.append(("ic", k, self._slot(c)) if k in ICONS else self._itext(v[:2], c, ist))
         L = (clock if cpos != "right" else []) + (icp if ipos == "left" else [])
+        self.l_lead = _lead(self.sfont, L[0][1]) if (cpos == "left" and L and L[0][0] == "t") else 0    # flush with the line column
         R = (icp if ipos == "right" else []) + (clock if cpos == "right" else [])
         for side in (0, 1):
             parts = R if side else L
@@ -892,7 +911,7 @@ class Screen:
         self._place()
 
     def _place(self):
-        if self.tg_l is not None: self.tg_l.x = self.ml + self.lx
+        if self.tg_l is not None: self.tg_l.x = self.ml + self.lx - (getattr(self, "l_lead", 0) if self.lx == 0 else 0)
         if self.tg_r is not None: self.tg_r.x = self.ml + self.W - self.pg_w - self.right_w
 
     def set_ticker(self, items, reset=False):
@@ -903,7 +922,7 @@ class Screen:
         if reset:
             while len(self.tick_group): self.tick_group.pop()
             self.tick_segs = []
-        keep = items + [s[2] for s in self.tick_segs]
+        keep = items + [s[2] for s in self.tick_segs if s[2] is not None]
         for k in list(self.tick_bmps):
             if k not in keep: del self.tick_bmps[k]
 
@@ -922,11 +941,20 @@ class Screen:
             if self.tick_gap and i == 0 and segs: return True       # not endless: a round leaves before the next one starts
             t = it[i]
             self.tick_last = t; self.tick_i = i
+            if segs:        # the divider only once the next text is sure to follow
+                sb = self.tick_bmps.get(None)
+                if sb is None:
+                    sb = displayio.Bitmap(max(1, tw(self.sfont, self.tick_sep)), self.sh, NCOL)
+                    text(sb, self.sfont, self.tick_sep, 0, 0, ES["ticker"], it=self.tick_it)
+                    self.tick_bmps[None] = sb
+                tg = displayio.TileGrid(sb, pixel_shader=self.pal, x=x, y=self.sy)
+                self.tick_group.append(tg)
+                segs.append([tg, sb.width, None])
+                x += sb.width
             b = self.tick_bmps.get(t)
             if b is None:
-                s = t + self.tick_sep
-                b = displayio.Bitmap(min(tw(self.sfont, s) + (2 if self.tick_it else 0), 1600), self.sh, NCOL)
-                text(b, self.sfont, s, 0, 0, ES["ticker"], it=self.tick_it)
+                b = displayio.Bitmap(min(tw(self.sfont, t) + (2 if self.tick_it else 0), 1600), self.sh, NCOL)
+                text(b, self.sfont, t, 0, 0, ES["ticker"], it=self.tick_it)
                 self.tick_bmps[t] = b
             tg = displayio.TileGrid(b, pixel_shader=self.pal, x=x, y=self.sy)
             self.tick_group.append(tg)

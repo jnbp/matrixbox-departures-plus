@@ -2,6 +2,7 @@
 import ampule, json
 import load_settings
 import dp_cfg
+from dp_data import mono_ms
 
 _app = None
 _HEX = "0123456789abcdefABCDEF"
@@ -25,6 +26,42 @@ def unquote(s):
             i += 1
     try: return bytes(out).decode("utf-8")
     except Exception: return s
+
+
+def _route(rule, method="GET"):
+    """ampule.route, plus the time each request takes, for /api/debug."""
+    def deco(fn):
+        def run(request):
+            t = mono_ms()
+            try: return fn(request)
+            finally:
+                if _app: _app.web_note(rule, mono_ms() - t)
+        return ampule.route(rule, method=method)(run)
+    return deco
+
+
+def _presets(p):
+    """save=NAME stores the current settings, load=NAME switches to them, delete=NAME removes them."""
+    out = {"ok": True}
+    ps = dp_cfg.presets()
+    name = (p.get("save") or p.get("load") or p.get("delete") or "").strip()[:24]
+    if "save" in p and name:
+        if name not in ps and len(ps) >= 12: return {"ok": False, "error": "12 presets at most"}
+        ps[name] = dp_cfg.preset_of(_app.cfg)
+        out["saved"] = dp_cfg.presets_save(ps)
+        _apply({"preset": name}, True)
+    elif "delete" in p and name in ps:
+        del ps[name]
+        out["saved"] = dp_cfg.presets_save(ps)
+        if _app.cfg["preset"] == name: _apply({"preset": ""}, True)
+    elif "load" in p:
+        new = _app.load_preset(name)
+        if not new: return {"ok": False, "error": "no preset called " + name}
+        out["changed"], out["saved"] = _apply(new, True)
+    _app.preset_names = sorted(ps)
+    out["presets"] = _app.preset_names
+    out["active"] = _app.cfg["preset"]
+    return out
 
 
 def _json(obj):
@@ -71,12 +108,12 @@ def init(app):
     global _app
     _app = app
 
-    @ampule.route("/exit", method="GET")
+    @_route("/exit", method="GET")
     def _exit(request):
         load_settings.app_running = False
         return (200, {}, '<meta http-equiv="refresh" content="0; url=../" />')
 
-    @ampule.route("/", method="GET")
+    @_route("/", method="GET")
     def _index(request):
         p = request.params
         if "aiohttp" in request.headers.get("user-agent", "") or "onoff" in p or "brightness" in p:
@@ -85,26 +122,32 @@ def init(app):
         with open("settings.html") as f: page = f.read()
         return (200, {}, header("Departures Plus", app=True) + page + footer())
 
-    @ampule.route("/api/config", method="GET")
+    @_route("/api/config", method="GET")
     def _cfg_get(request):
         return _json(dp_cfg.DEFAULTS if "defaults" in request.params else _app.cfg)
 
-    @ampule.route("/api/config", method="POST")
+    @_route("/api/config", method="POST")
     def _cfg_post(request):
         try: new = json.loads(request.body)
         except Exception: return _json({"ok": False, "error": "bad json"})
         changed, saved = _apply(new, True)
         return _json({"ok": True, "changed": changed, "saved": saved})
 
-    @ampule.route("/api/state", method="GET")
+    @_route("/api/state", method="GET")
     def _state(request):
         return _json(_app.state())
 
-    @ampule.route("/api/debug", method="GET")
+    @_route("/api/presets", method="GET")
+    def _presets_api(request):
+        p = {}
+        for k in request.params: p[k] = unquote(request.params[k])
+        return _json(_presets(p))
+
+    @_route("/api/debug", method="GET")
     def _debug(request):
         return _json(_app.debug())
 
-    @ampule.route("/api/set", method="GET")
+    @_route("/api/set", method="GET")
     def _set(request):
         # Runtime changes, e.g. from Home Assistant. Nothing is written to flash unless save=1.
         p = {}
@@ -117,6 +160,9 @@ def init(app):
             if _app.pin >= len(_app.active()): _app.pin = -1
             if _app.pin >= 0 and _app.shown and _app.cfg["mode"] == "rotate": _app.show(_app.pin)
         if "next" in p and _app.shown: _app.next_station()
+        if "preset" in p:            # a saved preset, e.g. from Home Assistant: /api/set?preset=Evening
+            r = _presets({"load": p.pop("preset")})
+            out["preset"] = r.get("active") if r.get("ok") else r.get("error")
         if p.get("logo") in ("1", "on", "true"):
             _app.logo_req = True
             out["logo"] = "shown" if _app._has_logo() else "none"
@@ -130,7 +176,7 @@ def init(app):
         out["state"] = _app.state()
         return _json(out)
 
-    @ampule.route("/api/logo", method="GET")
+    @_route("/api/logo", method="GET")
     def _logo_get(request):
         try:
             import binascii
@@ -139,7 +185,7 @@ def init(app):
         except Exception:
             return _json({"ok": True, "hex": ""})
 
-    @ampule.route("/api/logo", method="POST")
+    @_route("/api/logo", method="POST")
     def _logo_post(request):
         # The settings page sends the logo as hex text, or "clear" to remove it.
         b = (request.body or "").strip()
@@ -162,7 +208,7 @@ def init(app):
         except Exception as e:
             return _json({"ok": False, "error": str(e)})
 
-    @ampule.route("/api/message", method="GET")
+    @_route("/api/message", method="GET")
     def _message(request):
         # text=...&ttl=60 shows a message for 60 seconds, ttl=0 keeps it until cleared or restarted.
         # Several messages run in the ticker together, each until its own time is up.
@@ -178,7 +224,7 @@ def init(app):
         _app.t_sec = 0
         return _json({"ok": True, "messages": [m[1] for m in _app.msgs]})
 
-    @ampule.route("/api/search", method="GET")
+    @_route("/api/search", method="GET")
     def _search(request):
         p = request.params
         c = _app.cfg

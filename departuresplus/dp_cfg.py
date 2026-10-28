@@ -2,13 +2,15 @@
 # Pure data and helpers, no hardware access.
 import json
 
-VERSION = "0.11.0"
+VERSION = "0.12.0"
 APP = "departuresplus"
 CFG_FILE = "departuresplus.json"
 TS_HOST = "data.t-skylt.se"   # T-Skylt's data server
 TS_PORT = 90
 BVG_URL = "https://v6.bvg.transport.rest"   # free public BVG/VBB API, run by volunteers
-LOGO_FILE = "logo.bin"   # 'L', width, height (2 bytes each), colours, palette, 4-bit pixels
+LOGO_FILE = "logo.bin"
+PRESET_FILE = "dp_presets.json"   # {name: settings}, see presets()
+NOPRESET = ("stations", "source", "bvg_url", "host", "port", "tx_power", "preset")   # a preset leaves these alone   # 'L', width, height (2 bytes each), colours, palette, 4-bit pixels
 
 DEFAULTS = {
     "stations": [],          # [{name, country, operator, id, walk, on, lines, dir, modes, fb_operator, fb_id}]
@@ -107,6 +109,7 @@ DEFAULTS = {
     "tx_power": 0,           # Wi-Fi transmit power in dBm, 0 = leave the board's own setting
     "poll": 30,              # seconds between requests per station
     "calm": 0,               # fewer requests for a smoother ticker: every 2 minutes per station at most
+    "preset": "",            # the preset loaded last
     "source": "tskylt",      # tskylt | bvg (BVG/VBB API, Berlin-Brandenburg only) | auto (T-Skylt, BVG when it has no data) | own (host and port below)
     "bvg_url": BVG_URL,
     "host": "data.t-skylt.se",   # own server, answering like T-Skylt's
@@ -129,7 +132,7 @@ CHOICES = {
 }
 LIMITS = {"intro": (0, 10), "dwell": (1, 60), "logo_every": (1, 240), "logo_secs": (1, 60), "pages": (1, 5), "skip": (0, 60), "brightness": (1, 3), "poll": (20, 600),
           "port": (1, 65535), "max_rows": (0, 16), "line_len": (0, 6), "line_col": (0, 6), "gap": (0, 12), "tx_power": (0, 20), "margin_l": (0, 12), "margin_r": (0, 12)}
-STRLEN = {"bvg_url": 80, "ticker_text": 160, "ink_black": 120, "ink_white": 120, "abbr": 240, "strip": 120, "sched_days": 100, "tone_hex": 7, "walk_text": 24, "days_text": 70, "ticker_sep": 12, "nodeps_text": 60, "srow_text": 24,
+STRLEN = {"preset": 24, "bvg_url": 80, "ticker_text": 160, "ink_black": 120, "ink_white": 120, "abbr": 240, "strip": 120, "sched_days": 100, "tone_hex": 7, "walk_text": 24, "days_text": 70, "ticker_sep": 12, "nodeps_text": 60, "srow_text": 24,
           "icon1": 12, "icon2": 12, "icon3": 12, "icon1_c": 9, "icon2_c": 9, "icon3_c": 9,
           "c_time": 9, "c_dest": 9, "c_line": 9, "c_tag": 9, "c_clock": 9, "c_date": 9, "c_ticker": 9, "c_srow": 9, "c_srow_t": 9, "c_title": 9, "c_walk": 9, "c_pager": 9, "c_cancel": 9, "cancel_text": 12}
 
@@ -280,3 +283,25 @@ def save(cfg):
     except Exception as e:
         print("departuresplus: could not save,", e)   # USB-connected boards are read-only to their own code
         return False
+
+
+def presets():
+    try:
+        with open(PRESET_FILE) as f: j = json.loads(f.read())
+        return j if isinstance(j, dict) else {}
+    except Exception:
+        return {}
+
+
+def presets_save(p):
+    try:
+        with open(PRESET_FILE, "w") as f: f.write(json.dumps(p))
+        return True
+    except Exception as e:
+        print("departuresplus: could not save the presets,", e)
+        return False
+
+
+def preset_of(cfg):
+    """Everything a preset keeps: the look and behaviour, not the stations or the data source."""
+    return {k: cfg[k] for k in cfg if k in DEFAULTS and k not in NOPRESET}

@@ -60,6 +60,7 @@ class Net:
         self.last = {}         # what the most recent request did, for /api/debug
         self.tz = None         # local offset from UTC in seconds, once a BVG answer told it
         self.ctx = None        # TLS context, made on the first HTTPS request
+        self.idle = None       # called while waiting for an answer, so the ticker keeps moving
 
     def now(self):
         if self.t_off is None: return None
@@ -83,7 +84,8 @@ class Net:
 
     def get(self, host, port, path, limit=60000, tls=False):
         """HTTP/1.0 GET, over TLS when asked. Returns the body as str, or None."""
-        info = {"path": path, "at": mono_ms() // 1000, "bytes": 0, "error": "", "date": ""}
+        t0 = mono_ms()
+        info = {"path": path, "at": t0 // 1000, "bytes": 0, "error": "", "date": "", "connect_ms": 0, "ms": 0, "ticker_turns": 0}
         self.last = info
         req = ("GET " + path + " HTTP/1.0\r\nHost: " + host + "\r\nUser-Agent: DeparturesPlus/" + dp_cfg.VERSION +
                " (MatrixBOX)\r\nAccept: application/json\r\nConnection: close\r\n\r\n")
@@ -94,14 +96,25 @@ class Net:
             if tls: s = self._tls(s, host)
             s.settimeout(8 if tls else 5)
             s.connect((host, int(port)))
+            info["connect_ms"] = mono_ms() - t0
             out = req.encode("utf-8")
             sent = 0
             while sent < len(out):
                 n = s.send(out[sent:])
                 if n: sent += n
             buf = bytearray(1024)
+            # The server takes a moment to answer. Short timeouts hand that time to the ticker instead of freezing it.
+            if self.idle: s.settimeout(0.03)
+            end = mono_ms() + (10000 if tls else 6000)
             while len(data) < limit:
-                n = s.recv_into(buf)
+                try:
+                    n = s.recv_into(buf)
+                except OSError as e:
+                    if self.idle and _waiting(e) and mono_ms() < end:
+                        info["ticker_turns"] += 1
+                        self.idle()
+                        continue
+                    raise
                 if not n: break
                 data += buf[:n]
         except Exception as e:
@@ -113,6 +126,7 @@ class Net:
             except Exception:
                 pass
         info["bytes"] = len(data)
+        info["ms"] = mono_ms() - t0
         try:
             raw = bytes(data)
             cut = raw.find(b"\r\n\r\n")
@@ -138,6 +152,12 @@ class Net:
         except Exception as e:
             info["error"] = "decode: " + str(e)
             return None
+
+
+def _waiting(e):
+    """A read that timed out with nothing there yet, not a broken connection."""
+    if getattr(e, "errno", None) in (11, 110, 116): return True     # EAGAIN, ETIMEDOUT on the board
+    return "timed out" in str(e)
 
 
 def clean_dest(d, strip_prefix, strip=(), district=False):

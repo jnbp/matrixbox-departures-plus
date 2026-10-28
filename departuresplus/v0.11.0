@@ -1,1 +1,0 @@
-{"description":"Departures with station rotation, line colors, a ticker and a Home Assistant API","emoji":"🚇","v0.11.0":["Settings page in the MatrixBOX design","Long destinations can scroll","Destinations without the district","Cancelled departures: show or hide, own text and color","Ringbahn arrows and other arrows show up","Data source setting"]}
