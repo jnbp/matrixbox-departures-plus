@@ -2,7 +2,7 @@
 # Pure data and helpers, no hardware access.
 import json
 
-VERSION = "0.12.0"
+VERSION = "0.12.1"
 APP = "departuresplus"
 CFG_FILE = "departuresplus.json"
 TS_HOST = "data.t-skylt.se"   # T-Skylt's data server
@@ -305,3 +305,49 @@ def presets_save(p):
 def preset_of(cfg):
     """Everything a preset keeps: the look and behaviour, not the stations or the data source."""
     return {k: cfg[k] for k in cfg if k in DEFAULTS and k not in NOPRESET}
+
+
+def _bytes(path):
+    try:
+        with open(path, "rb") as f: return f.read()
+    except OSError:
+        return None
+
+
+def _drop(path):
+    import os
+    try: os.remove(path)
+    except OSError: pass
+
+
+def preset_logo_save(ps, name):
+    """Copies the current logo next to the preset. -> its file name, or "" without a logo."""
+    old = (ps.get(name) or {}).get("_logo") or ""
+    d = _bytes(LOGO_FILE)
+    if d is None:
+        if old: _drop(old)
+        return ""
+    fn = old
+    if not fn:
+        used = [x.get("_logo") for x in ps.values() if isinstance(x, dict)]
+        i = 1
+        while "dp_pl" + str(i) + ".bin" in used: i += 1
+        fn = "dp_pl" + str(i) + ".bin"
+    with open(fn, "wb") as f: f.write(d)
+    return fn
+
+
+def preset_logo_load(p):
+    """Puts the preset's logo in place. Presets saved before 0.12.1 leave the logo as it is."""
+    if "_logo" not in p: return False
+    fn = p["_logo"]
+    d = _bytes(fn) if fn else None
+    if d:
+        with open(LOGO_FILE, "wb") as f: f.write(d)
+    else:
+        _drop(LOGO_FILE)
+    return True
+
+
+def preset_logo_drop(p):
+    if isinstance(p, dict) and p.get("_logo"): _drop(p["_logo"])

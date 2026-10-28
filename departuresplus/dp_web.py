@@ -47,16 +47,23 @@ def _presets(p):
     name = (p.get("save") or p.get("load") or p.get("delete") or "").strip()[:24]
     if "save" in p and name:
         if name not in ps and len(ps) >= 12: return {"ok": False, "error": "12 presets at most"}
-        ps[name] = dp_cfg.preset_of(_app.cfg)
+        new = dp_cfg.preset_of(_app.cfg)
+        try: new["_logo"] = dp_cfg.preset_logo_save(ps, name)       # the logo goes with the preset
+        except OSError as e: out["logo"] = "not stored: " + str(e)
+        ps[name] = new
         out["saved"] = dp_cfg.presets_save(ps)
         _apply({"preset": name}, True)
     elif "delete" in p and name in ps:
+        dp_cfg.preset_logo_drop(ps[name])
         del ps[name]
         out["saved"] = dp_cfg.presets_save(ps)
         if _app.cfg["preset"] == name: _apply({"preset": ""}, True)
     elif "load" in p:
         new = _app.load_preset(name)
         if not new: return {"ok": False, "error": "no preset called " + name}
+        try: dp_cfg.preset_logo_load(new)          # before the settings: the rebuild that follows picks it up
+        except Exception as e:
+            out["logo"] = "not switched: " + str(e)
         out["changed"], out["saved"] = _apply(new, True)
     _app.preset_names = sorted(ps)
     out["presets"] = _app.preset_names

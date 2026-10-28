@@ -16,7 +16,7 @@ This is a community project and not affiliated with T-Skylt Sweden AB. It gets i
 * **Real-time mark.** Tells live departures from timetable ones, where the operator's data says so.
 * **Station row:** the station's name above or below the departures, with its lines and the time if you like. It stays still while a station's pages turn.
 * **Per station:** walking time, lines to show or to hide (also per direction), a filter by direction and vehicle type, and a fallback data source that steps in when the main one has fewer than two departures to show.
-* **Presets:** save the settings under a name and switch between them on the settings page or from Home Assistant, e.g. a calm look for the evening.
+* **Presets:** save the settings and the logo under a name and switch between them on the settings page or from Home Assistant, e.g. a calm look for the evening.
 * **Colors:** destinations, times, line names, station title, station row, clock, date, ticker and page indicator can each have their own color.
 * **Logo:** upload a picture on the settings page and it takes over the display every few minutes, fading, zooming, sliding, wiping or dissolving in, glowing or growing and shrinking if you like, and first thing when the display comes on. Home Assistant can show it at the press of a button.
 * **Display:** three text sizes, bold text, ten LED tones or your own, brightness, margins, 180° rotation, an inverted look, a schedule per weekday, sleep while nothing departs.
