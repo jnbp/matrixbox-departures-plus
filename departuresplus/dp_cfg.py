@@ -2,7 +2,7 @@
 # Pure data and helpers, no hardware access.
 import json
 
-VERSION = "0.12.2"
+VERSION = "0.12.3"
 APP = "departuresplus"
 CFG_FILE = "departuresplus.json"
 TS_HOST = "data.t-skylt.se"   # T-Skylt's data server
@@ -108,6 +108,7 @@ DEFAULTS = {
     "logo_round": 1,         # with several stations: wait until the rotation starts over
     "tx_power": 0,           # Wi-Fi transmit power in dBm, 0 = leave the board's own setting
     "poll": 30,              # seconds between requests per station
+    "watchdog": 1,           # restart the board when it hangs for a minute
     "calm": 0,               # fewer requests for a smoother ticker: every 2 minutes per station at most
     "preset": "",            # the preset loaded last
     "source": "tskylt",      # tskylt | bvg (BVG/VBB API, Berlin-Brandenburg only) | auto (T-Skylt, BVG when it has no data) | own (host and port below)

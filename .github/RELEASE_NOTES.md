@@ -1,13 +1,14 @@
-# 0.12.2 - Preset logos you can see, a complete settings export
+# 0.12.3 - No more frozen board
 
 **Fixed**
 
-* **Saving a preset after picking a new logo:** the new picture was only a preview until you pressed Upload, so the preset kept the logo that was still on the board. Saving a preset now stores a logo that is still in preview first.
+* **The board froze after a day or more** and only came back after unplugging it. Two places could keep it waiting without end: a request that the network did not take, and looking up the data server's address, which the board did for every request. A request now gives up after a short while, and the address is looked up once every half hour.
+* **Watchdog:** should the app still stop for a whole minute, the board restarts by itself instead of staying dark (Advanced, on by default). With Departures Plus set to start by itself in the MatrixBOX settings, it is back a few seconds later.
 
 **New**
 
-* **Each preset shows its logo:** the preset list on the settings page shows a small picture of the logo kept with each preset, or says that it has none.
-* **Complete settings export:** Export settings now writes one file with the settings, all presets with their logos, and the current logo. Import settings puts them all back; presets with the same name are replaced, others stay.
+* **Any letter shows up:** letters the board's fonts do not have, such as in Kraków, São Paulo, İstanbul or Beyoncé, now show as their plain letter instead of a gap, in the ticker as well as in destinations. Emojis, for example in calendar entries, are left out.
+* `/api/debug` says why the board last started (`started_by`, e.g. `WATCHDOG` after such a restart, `POWER_ON` after plugging it in) and which pause was the longest since then.
 
 **Update**
 

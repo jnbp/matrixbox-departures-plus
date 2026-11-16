@@ -24,6 +24,7 @@ while load_settings.app_running:
         app.note("tick: " + str(e))
         time.sleep(1)
 
+app.guard(False)       # other apps do not feed it
 app.hw(True)
 try: display.root_group = _root     # older firmware does not restore its own screen on exit
 except Exception: pass

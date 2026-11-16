@@ -55,7 +55,29 @@ ALIAS = {"\u201e": '"', "\u201c": '"', "\u201d": '"', "\u2018": "'", "\u2019": "
          "\u00ab": "<", "\u00bb": ">", "\u00b2": "2", "\u00b3": "3", "\u00a0": " ", "\u2009": " ", "\u202f": " "}
 
 
+# Pairs of a letter and its plain letter, for letters the fonts do not have: é e, ł l, İ I ...
+FOLD = '`\'´\'·•ÀAÁAÂAÃAÄAÅAÇCÈEÉEÊEËEÌIÍIÎIÏIÐDÑNÒOÓOÔOÕOÖO×xØOÙUÚUÛUÜUÝYàaáaâaãaäaåaçcèeéeêeëeìiíiîiïiðdñnòoóoôoõoöoøoùuúuûuüuýyÿyĀAāaĂAăaĄAąaĆCćcĈCĉcĊCċcČCčcĎDďdĐDđdĒEēeĔEĕeĖEėeĘEęeĚEěeĜGĝgĞGğgĠGġgĢGģgĤHĥhĦHħhĨIĩiĪIīiĬIĭiĮIįiİIıiĴJĵjĶKķkĹLĺlĻLļlĽLľlŁLłlŃNńnŅNņnŇNňnŌOōoŎOŏoŐOőoŔRŕrŖRŗrŘRřrŚSśsŜSŝsŞSşsŠSšsŢTţtŤTťtŦTŧtŨUũuŪUūuŬUŭuŮUůuŰUűuŲUųuŴWŵwŶYŷyŸYŹZźzŻZżzŽZžzſsƠOơoƯUưuǍAǎaǏIǐiǑOǒoǓUǔuǕUǖuǗUǘuǙUǚuǛUǜuǞAǟaǠAǡaǦGǧgǨKǩkǪOǫoǬOǭoǰjǴGǵgǸNǹnǺAǻaȀAȁaȂAȃaȄEȅeȆEȇeȈIȉiȊIȋiȌOȍoȎOȏoȐRȑrȒRȓrȔUȕuȖUȗuȘSșsȚTțtȞHȟhȦAȧaȨEȩeȪOȫoȬOȭoȮOȯoȰOȱoȲYȳyʼ\'ḀAḁaḂBḃbḄBḅbḆBḇbḈCḉcḊDḋdḌDḍdḎDḏdḐDḑdḒDḓdḔEḕeḖEḗeḘEḙeḚEḛeḜEḝeḞFḟfḠGḡgḢHḣhḤHḥhḦHḧhḨHḩhḪHḫhḬIḭiḮIḯiḰKḱkḲKḳkḴKḵkḶLḷlḸLḹlḺLḻlḼLḽlḾMḿmṀMṁmṂMṃmṄNṅnṆNṇnṈNṉnṊNṋnṌOṍoṎOṏoṐOṑoṒOṓoṔPṕpṖPṗpṘRṙrṚRṛrṜRṝrṞRṟrṠSṡsṢSṣsṤSṥsṦSṧsṨSṩsṪTṫtṬTṭtṮTṯtṰTṱtṲUṳuṴUṵuṶUṷuṸUṹuṺUṻuṼVṽvṾVṿvẀWẁwẂWẃwẄWẅwẆWẇwẈWẉwẊXẋxẌXẍxẎYẏyẐZẑzẒZẓzẔZẕzẖhẗtẘwẙyẛsẠAạaẢAảaẤAấaẦAầaẨAẩaẪAẫaẬAậaẮAắaẰAằaẲAẳaẴAẵaẶAặaẸEẹeẺEẻeẼEẽeẾEếeỀEềeỂEểeỄEễeỆEệeỈIỉiỊIịiỌOọoỎOỏoỐOốoỒOồoỔOổoỖOỗoỘOộoỚOớoỜOờoỞOởoỠOỡoỢOợoỤUụuỦUủuỨUứuỪUừuỬUửuỮUữuỰUựuỲYỳyỴYỵyỶYỷyỸYỹy‐-‑-‒-‧•′\'″"‹<›>−-'
+NOGLYPH = [0]       # drawn as nothing: emojis and invisible joiners
+
+
+def _blank(o):
+    return (0x1F000 <= o <= 0x1FAFF or 0x2600 <= o <= 0x27BF or 0xFE00 <= o <= 0xFE0F or 0x200B <= o <= 0x200F
+            or o == 0x2060 or 0xE0000 <= o <= 0xE007F)
+
+
 def _glyph(font, ch, low):
+    g = _glyph1(font, ch, low)
+    if g is not None: return g
+    o = ord(ch)
+    if _blank(o): return NOGLYPH
+    i = FOLD.find(ch)
+    if i >= 0 and i % 2 == 0:
+        g = _glyph1(font, FOLD[i + 1], low)
+        if g is not None: return g
+    return font.get("_")
+
+
+def _glyph1(font, ch, low):
     if low: ch = ch.lower()
     for k in range(3):
         g = FIX.get(font["fontheight"], {}).get(ch) or font.get(ch)
@@ -64,7 +86,7 @@ def _glyph(font, ch, low):
             g = x.get(ch) if x else None
         if g is not None or ch not in ALIAS: break
         ch = ALIAS[ch]
-    return g if g is not None else font.get("_")
+    return g
 
 
 def _lead(font, s):
@@ -107,6 +129,7 @@ def text(bmp, font, s, x, y, c, x0=0, x1=None, fh=0, it=False):
             x += 4
             continue
         gw = g[0]
+        if not gw: continue            # an emoji: nothing to draw
         if x + gw > x0 and x < x1:
             n = len(g) - 1
             if n > fh: n = fh

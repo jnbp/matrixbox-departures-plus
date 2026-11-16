@@ -13,6 +13,10 @@ def _pad2(n):
 class App:
     def __init__(self):
         self.cfg = dp_cfg.load()
+        self.wdt = None; self.wdt_none = False      # wdt_none: this board has no watchdog
+        try: self.started = str(microcontroller.cpu.reset_reason).split(".")[-1]       # why the board last started
+        except Exception: self.started = "unknown"
+        self.worst = (0, 0, "")       # the longest pause since start: (ms, at, what)
         self.net = dp_data.Net()
         self.net.idle = self.on_wait
         self.t_loop = 0; self.stall = 0     # the longest pause between two passes, for /api/debug
@@ -67,6 +71,28 @@ class App:
         o = self.cfg.get(k + "_text")
         if o: return o
         return dp_cfg.STR[k]
+
+    def guard(self, on=True):
+        """The watchdog restarts the board if the app stops coming round for a minute, instead of a dark, frozen display."""
+        want = on and self.cfg.get("watchdog", 1) and not self.wdt_none
+        try:
+            if want and self.wdt is None:
+                from microcontroller import watchdog
+                from watchdog import WatchDogMode
+                watchdog.timeout = 60
+                watchdog.mode = WatchDogMode.RESET
+                watchdog.feed()
+                self.wdt = watchdog
+            elif not want and self.wdt is not None:
+                self.wdt.deinit()
+                self.wdt = None
+        except Exception as e:
+            self.note("watchdog: " + str(e)); self.wdt_none = True
+
+    def feed(self):
+        if self.wdt is not None:
+            try: self.wdt.feed()
+            except Exception: pass
 
     def hw(self, restore=False):
         """Panel rotation and Wi-Fi power. `restore` puts back what the firmware had set."""
@@ -207,6 +233,7 @@ class App:
         return p
 
     def _slow(self, ms, what):
+        if ms > self.worst[0]: self.worst = (ms, mono_ms() // 1000, what)
         self.slow.append((mono_ms() // 1000, ms, what))
         if len(self.slow) > 15: self.slow.pop(0)
 
@@ -425,6 +452,7 @@ class App:
 
     # ---- flow ----------------------------------------------------------
     def restart(self):
+        self.guard(True)
         self.logo_end = 0
         self.hw()
         self.scr.build(self.cfg)
@@ -484,10 +512,12 @@ class App:
         self.t0 = mono_ms()
 
     def on_frame(self):
+        self.feed()
         self.scr.step_ticker()
 
     def on_wait(self):
         """While a request waits for its answer: keep the ticker going at its own pace."""
+        self.feed()
         now = mono_ms()
         sp = self.cfg["ticker_speed"]
         if self.vis and now - self.t_tick >= (60 if sp == "slow" else 18 if sp == "fast" else 35):
@@ -679,6 +709,7 @@ class App:
         return False
 
     def tick(self):
+        self.feed()
         now = mono_ms()
         if self.t_loop:
             gap = now - self.t_loop
@@ -841,7 +872,9 @@ class App:
         now = mono_ms() // 1000
         p = [{"seconds_ago": now - a, "ms": m, "doing": w} for a, m, w in self.slow]
         self.slow = []; st = self.stall; self.stall = 0       # every look starts a fresh count
-        return {"slow": p, "longest_pause_ms": st, "version": dp_cfg.VERSION, "uptime": mono_ms() // 1000, "free": gc.mem_free() if hasattr(gc, "mem_free") else -1, "clock_offset": self.net.t_off,
+        return {"started_by": self.started, "watchdog": self.wdt is not None,
+                "slowest_since_start": {"ms": self.worst[0], "seconds_ago": now - self.worst[1], "doing": self.worst[2]} if self.worst[0] else None,
+                "slow": p, "longest_pause_ms": st, "version": dp_cfg.VERSION, "uptime": mono_ms() // 1000, "free": gc.mem_free() if hasattr(gc, "mem_free") else -1, "clock_offset": self.net.t_off,
                 "last_request": self.net.last, "notes": self.notes,
                 "cache": [{"key": k, "count": len(v["deps"]) if v["deps"] is not None else None, "msg": v["msg"], "src": v["src"],
                            "age": (mono_ms() - v["t"]) // 1000} for k, v in self.cache.items()]}

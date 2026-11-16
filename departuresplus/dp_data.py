@@ -61,6 +61,7 @@ class Net:
         self.tz = None         # local offset from UTC in seconds, once a BVG answer told it
         self.ctx = None        # TLS context, made on the first HTTPS request
         self.idle = None       # called while waiting for an answer, so the ticker keeps moving
+        self.dns = {}          # host -> (address, when): looked up once every half hour, not for every request
 
     def now(self):
         if self.t_off is None: return None
@@ -95,13 +96,32 @@ class Net:
             s = pool.socket(pool.AF_INET, pool.SOCK_STREAM)
             if tls: s = self._tls(s, host)
             s.settimeout(8 if tls else 5)
-            s.connect((host, int(port)))
+            addr = host
+            if not tls:          # TLS needs the name to check the certificate
+                a = self.dns.get(host)
+                if a is None or mono_ms() - a[1] > 1800000:
+                    try:
+                        a = (pool.getaddrinfo(host, int(port))[0][4][0], mono_ms())
+                        self.dns[host] = a
+                    except Exception:
+                        a = (host, mono_ms())
+                addr = a[0]
+            try:
+                s.connect((addr, int(port)))
+            except Exception:
+                self.dns.pop(host, None)       # look it up again next time
+                raise
             info["connect_ms"] = mono_ms() - t0
             out = req.encode("utf-8")
             sent = 0
+            stuck = 0
             while sent < len(out):
                 n = s.send(out[sent:])
                 if n: sent += n
+                else:
+                    stuck += 1                 # a connection that takes nothing must not keep the board waiting
+                    if stuck > 50: raise OSError("send stalled")
+                    time.sleep(0.02)
             buf = bytearray(1024)
             # The server takes a moment to answer. Short timeouts hand that time to the ticker instead of freezing it.
             if self.idle: s.settimeout(0.03)
